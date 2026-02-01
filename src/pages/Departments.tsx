@@ -1,105 +1,87 @@
+import { useEffect, useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import {
-  Code,
-  TrendingUp,
-  Megaphone,
-  Users,
-  Calculator,
-  Settings,
-  Plus,
-  MoreVertical,
-} from "lucide-react";
+import { Plus, MoreVertical, Users } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { supabase } from "@/integrations/supabase/client";
+import { useRequireAuth } from "@/hooks/useAuth";
 
-const departments = [
-  {
-    id: "1",
-    name: "Engineering",
-    icon: Code,
-    headCount: 45,
-    maxCapacity: 50,
-    lead: "John Smith",
-    budget: "$1.2M",
-    color: "bg-primary/10 text-primary",
-    projects: 12,
-  },
-  {
-    id: "2",
-    name: "Sales",
-    icon: TrendingUp,
-    headCount: 28,
-    maxCapacity: 35,
-    lead: "Maria Garcia",
-    budget: "$800K",
-    color: "bg-accent/10 text-accent",
-    projects: 8,
-  },
-  {
-    id: "3",
-    name: "Marketing",
-    icon: Megaphone,
-    headCount: 20,
-    maxCapacity: 25,
-    lead: "Alex Turner",
-    budget: "$500K",
-    color: "bg-info/10 text-info",
-    projects: 6,
-  },
-  {
-    id: "4",
-    name: "Human Resources",
-    icon: Users,
-    headCount: 12,
-    maxCapacity: 15,
-    lead: "Rachel Green",
-    budget: "$300K",
-    color: "bg-success/10 text-success",
-    projects: 4,
-  },
-  {
-    id: "5",
-    name: "Finance",
-    icon: Calculator,
-    headCount: 18,
-    maxCapacity: 20,
-    lead: "David Kim",
-    budget: "$400K",
-    color: "bg-warning/10 text-warning",
-    projects: 5,
-  },
-  {
-    id: "6",
-    name: "Operations",
-    icon: Settings,
-    headCount: 33,
-    maxCapacity: 40,
-    lead: "Chris Brown",
-    budget: "$600K",
-    color: "bg-purple-500/10 text-purple-500",
-    projects: 7,
-  },
-];
+interface Department {
+  id: string;
+  name: string;
+  description: string | null;
+  employeeCount: number;
+}
 
 export default function Departments() {
+  const { user, loading: authLoading } = useRequireAuth();
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [totalEmployees, setTotalEmployees] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      const [deptRes, profilesRes] = await Promise.all([
+        supabase.from("departments").select("id, name, description"),
+        supabase.from("profiles").select("id, department_id"),
+      ]);
+
+      if (deptRes.data && profilesRes.data) {
+        const deptCounts = profilesRes.data.reduce((acc, profile) => {
+          if (profile.department_id) {
+            acc[profile.department_id] = (acc[profile.department_id] || 0) + 1;
+          }
+          return acc;
+        }, {} as Record<string, number>);
+
+        setDepartments(
+          deptRes.data.map((dept) => ({
+            ...dept,
+            employeeCount: deptCounts[dept.id] || 0,
+          }))
+        );
+        setTotalEmployees(profilesRes.data.length);
+      }
+      setLoading(false);
+    }
+
+    if (user) fetchData();
+  }, [user]);
+
+  if (authLoading || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  const colors = [
+    "bg-primary/10 text-primary",
+    "bg-accent/10 text-accent",
+    "bg-info/10 text-info",
+    "bg-success/10 text-success",
+    "bg-warning/10 text-warning",
+    "bg-purple-500/10 text-purple-500",
+  ];
+
   return (
     <AppLayout title="Departments" subtitle="Manage company departments">
-      {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-3">
           <Badge variant="secondary" className="text-sm">
             {departments.length} Departments
           </Badge>
           <Badge variant="secondary" className="text-sm">
-            156 Total Employees
+            {totalEmployees} Total Employees
           </Badge>
         </div>
         <Button variant="gradient">
@@ -108,11 +90,12 @@ export default function Departments() {
         </Button>
       </div>
 
-      {/* Department Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6">
         {departments.map((dept, index) => {
-          const Icon = dept.icon;
-          const capacityPercentage = (dept.headCount / dept.maxCapacity) * 100;
+          const color = colors[index % colors.length];
+          const maxCapacity = Math.max(dept.employeeCount + 10, 20);
+          const capacityPercentage = (dept.employeeCount / maxCapacity) * 100;
+          
           return (
             <Card
               key={dept.id}
@@ -122,13 +105,13 @@ export default function Departments() {
               <CardContent className="p-6">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-4">
-                    <div className={`p-3 rounded-xl ${dept.color}`}>
-                      <Icon className="w-6 h-6" />
+                    <div className={`p-3 rounded-xl ${color}`}>
+                      <Users className="w-6 h-6" />
                     </div>
                     <div>
                       <h3 className="font-semibold text-lg">{dept.name}</h3>
                       <p className="text-sm text-muted-foreground">
-                        Lead: {dept.lead}
+                        {dept.description || "No description"}
                       </p>
                     </div>
                   </div>
@@ -147,31 +130,23 @@ export default function Departments() {
                 </div>
 
                 <div className="space-y-4">
-                  {/* Headcount Progress */}
                   <div>
                     <div className="flex justify-between text-sm mb-2">
-                      <span className="text-muted-foreground">Headcount</span>
+                      <span className="text-muted-foreground">Employees</span>
                       <span className="font-medium">
-                        {dept.headCount} / {dept.maxCapacity}
+                        {dept.employeeCount} / {maxCapacity}
                       </span>
                     </div>
                     <Progress value={capacityPercentage} className="h-2" />
                   </div>
 
-                  {/* Stats */}
                   <div className="flex justify-between pt-4 border-t border-border">
                     <div className="text-center">
-                      <p className="text-xl font-bold">{dept.budget}</p>
-                      <p className="text-xs text-muted-foreground">Budget</p>
+                      <p className="text-xl font-bold">{dept.employeeCount}</p>
+                      <p className="text-xs text-muted-foreground">Employees</p>
                     </div>
                     <div className="text-center">
-                      <p className="text-xl font-bold">{dept.projects}</p>
-                      <p className="text-xs text-muted-foreground">Projects</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xl font-bold">
-                        {Math.round(capacityPercentage)}%
-                      </p>
+                      <p className="text-xl font-bold">{Math.round(capacityPercentage)}%</p>
                       <p className="text-xs text-muted-foreground">Capacity</p>
                     </div>
                   </div>
@@ -180,6 +155,11 @@ export default function Departments() {
             </Card>
           );
         })}
+        {departments.length === 0 && (
+          <div className="col-span-full text-center py-16 text-muted-foreground">
+            No departments found
+          </div>
+        )}
       </div>
     </AppLayout>
   );

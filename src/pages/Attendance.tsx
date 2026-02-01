@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -5,71 +6,70 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Clock, LogIn, LogOut, Coffee } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useRequireAuth } from "@/hooks/useAuth";
+import { format } from "date-fns";
 
-const attendanceData = [
-  {
-    id: "1",
-    name: "Sarah Johnson",
-    initials: "SJ",
-    department: "Engineering",
-    clockIn: "09:00 AM",
-    clockOut: null,
-    status: "present",
-    breakTime: "45 min",
-  },
-  {
-    id: "2",
-    name: "Michael Chen",
-    initials: "MC",
-    department: "Sales",
-    clockIn: "08:45 AM",
-    clockOut: null,
-    status: "present",
-    breakTime: "30 min",
-  },
-  {
-    id: "3",
-    name: "Emily Davis",
-    initials: "ED",
-    department: "Marketing",
-    clockIn: "09:15 AM",
-    clockOut: null,
-    status: "on-break",
-    breakTime: "15 min",
-  },
-  {
-    id: "4",
-    name: "James Wilson",
-    initials: "JW",
-    department: "HR",
-    clockIn: null,
-    clockOut: null,
-    status: "absent",
-    breakTime: "0 min",
-  },
-  {
-    id: "5",
-    name: "Lisa Anderson",
-    initials: "LA",
-    department: "Finance",
-    clockIn: "08:30 AM",
-    clockOut: "05:30 PM",
-    status: "completed",
-    breakTime: "60 min",
-  },
-];
+interface AttendanceRecord {
+  id: string;
+  clock_in: string | null;
+  clock_out: string | null;
+  status: string | null;
+  employee: {
+    first_name: string | null;
+    last_name: string | null;
+    department: { name: string } | null;
+  } | null;
+}
 
 const statusStyles: Record<string, { bg: string; text: string; label: string }> = {
   present: { bg: "bg-success/10", text: "text-success", label: "Present" },
   absent: { bg: "bg-destructive/10", text: "text-destructive", label: "Absent" },
-  "on-break": { bg: "bg-warning/10", text: "text-warning", label: "On Break" },
-  completed: { bg: "bg-info/10", text: "text-info", label: "Completed" },
+  late: { bg: "bg-warning/10", text: "text-warning", label: "Late" },
 };
 
 export default function Attendance() {
+  const { user, loading: authLoading } = useRequireAuth();
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [stats, setStats] = useState({ clockedIn: 0, absent: 0, late: 0 });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      const today = new Date().toISOString().split('T')[0];
+      
+      const [recordsRes, presentRes, absentRes] = await Promise.all([
+        supabase
+          .from("attendance_records")
+          .select("id, clock_in, clock_out, status, employee:profiles!attendance_records_employee_id_fkey(first_name, last_name, department:departments(name))")
+          .eq("record_date", today)
+          .order("clock_in", { ascending: false }),
+        supabase.from("attendance_records").select("id", { count: "exact" }).eq("record_date", today).eq("status", "present"),
+        supabase.from("attendance_records").select("id", { count: "exact" }).eq("record_date", today).eq("status", "absent"),
+      ]);
+
+      if (recordsRes.data) setRecords(recordsRes.data as AttendanceRecord[]);
+      setStats({
+        clockedIn: presentRes.count || 0,
+        absent: absentRes.count || 0,
+        late: 0,
+      });
+      setLoading(false);
+    }
+
+    if (user) fetchData();
+  }, [user]);
+
+  if (authLoading || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
   return (
     <AppLayout title="Attendance" subtitle="Track daily attendance">
-      {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <Card className="glass-card">
           <CardContent className="p-4 flex items-center gap-4">
@@ -77,7 +77,7 @@ export default function Attendance() {
               <LogIn className="w-6 h-6 text-success" />
             </div>
             <div>
-              <p className="text-2xl font-bold">142</p>
+              <p className="text-2xl font-bold">{stats.clockedIn}</p>
               <p className="text-sm text-muted-foreground">Clocked In</p>
             </div>
           </CardContent>
@@ -88,7 +88,7 @@ export default function Attendance() {
               <LogOut className="w-6 h-6 text-destructive" />
             </div>
             <div>
-              <p className="text-2xl font-bold">14</p>
+              <p className="text-2xl font-bold">{stats.absent}</p>
               <p className="text-sm text-muted-foreground">Absent</p>
             </div>
           </CardContent>
@@ -99,8 +99,8 @@ export default function Attendance() {
               <Coffee className="w-6 h-6 text-warning" />
             </div>
             <div>
-              <p className="text-2xl font-bold">8</p>
-              <p className="text-sm text-muted-foreground">On Break</p>
+              <p className="text-2xl font-bold">{stats.late}</p>
+              <p className="text-sm text-muted-foreground">Late</p>
             </div>
           </CardContent>
         </Card>
@@ -110,14 +110,13 @@ export default function Attendance() {
               <Clock className="w-6 h-6 text-info" />
             </div>
             <div>
-              <p className="text-2xl font-bold">7.5h</p>
-              <p className="text-sm text-muted-foreground">Avg. Hours</p>
+              <p className="text-2xl font-bold">{records.length}</p>
+              <p className="text-sm text-muted-foreground">Total Records</p>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Attendance Table */}
       <Card className="glass-card">
         <CardHeader>
           <CardTitle className="text-lg">Today's Attendance</CardTitle>
@@ -127,32 +126,22 @@ export default function Attendance() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">
-                    Employee
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">
-                    Department
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">
-                    Clock In
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">
-                    Clock Out
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">
-                    Break
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">
-                    Status
-                  </th>
-                  <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">
-                    Actions
-                  </th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Employee</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Department</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Clock In</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Clock Out</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Status</th>
+                  <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {attendanceData.map((record, index) => {
-                  const status = statusStyles[record.status];
+                {records.map((record, index) => {
+                  const status = statusStyles[record.status || "present"];
+                  const firstName = record.employee?.first_name || "";
+                  const lastName = record.employee?.last_name || "";
+                  const fullName = `${firstName} ${lastName}`.trim() || "Unknown";
+                  const initials = `${firstName[0] || ""}${lastName[0] || ""}`.toUpperCase() || "?";
+                  
                   return (
                     <tr
                       key={record.id}
@@ -163,44 +152,39 @@ export default function Attendance() {
                         <div className="flex items-center gap-3">
                           <Avatar className="h-9 w-9">
                             <AvatarFallback className="bg-primary/10 text-primary text-sm">
-                              {record.initials}
+                              {initials}
                             </AvatarFallback>
                           </Avatar>
-                          <span className="font-medium">{record.name}</span>
+                          <span className="font-medium">{fullName}</span>
                         </div>
                       </td>
                       <td className="py-3 px-4 text-muted-foreground">
-                        {record.department}
+                        {record.employee?.department?.name || "—"}
                       </td>
                       <td className="py-3 px-4">
-                        {record.clockIn || (
-                          <span className="text-muted-foreground">—</span>
-                        )}
+                        {record.clock_in ? format(new Date(record.clock_in), "h:mm a") : "—"}
                       </td>
                       <td className="py-3 px-4">
-                        {record.clockOut || (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-muted-foreground">
-                        {record.breakTime}
+                        {record.clock_out ? format(new Date(record.clock_out), "h:mm a") : "—"}
                       </td>
                       <td className="py-3 px-4">
-                        <Badge
-                          variant="secondary"
-                          className={cn(status.bg, status.text)}
-                        >
+                        <Badge variant="secondary" className={cn(status.bg, status.text)}>
                           {status.label}
                         </Badge>
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <Button variant="ghost" size="sm">
-                          View
-                        </Button>
+                        <Button variant="ghost" size="sm">View</Button>
                       </td>
                     </tr>
                   );
                 })}
+                {records.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-muted-foreground">
+                      No attendance records for today
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

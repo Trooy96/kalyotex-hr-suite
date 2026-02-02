@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useRequireAuth } from "@/hooks/useAuth";
 import { format } from "date-fns";
+import { RequestLeaveDialog } from "@/components/leave/RequestLeaveDialog";
+import { useToast } from "@/hooks/use-toast";
 
 interface LeaveRequest {
   id: string;
@@ -38,37 +40,66 @@ const leaveTypeStyles: Record<string, string> = {
 
 export default function Leave() {
   const { user, loading: authLoading } = useRequireAuth();
+  const { toast } = useToast();
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [stats, setStats] = useState({ pending: 0, approved: 0, onLeave: 0, totalDays: 0 });
   const [loading, setLoading] = useState(true);
 
+  async function fetchData() {
+    const today = new Date().toISOString().split('T')[0];
+    
+    const [requestsRes, pendingRes, approvedRes, onLeaveRes] = await Promise.all([
+      supabase
+        .from("leave_requests")
+        .select("id, leave_type, start_date, end_date, reason, status, employee:profiles!leave_requests_employee_id_fkey(first_name, last_name)")
+        .order("created_at", { ascending: false })
+        .limit(20),
+      supabase.from("leave_requests").select("id", { count: "exact" }).eq("status", "pending"),
+      supabase.from("leave_requests").select("id", { count: "exact" }).eq("status", "approved"),
+      supabase.from("leave_requests").select("id", { count: "exact" }).eq("status", "approved").lte("start_date", today).gte("end_date", today),
+    ]);
+
+    if (requestsRes.data) setLeaveRequests(requestsRes.data as LeaveRequest[]);
+    setStats({
+      pending: pendingRes.count || 0,
+      approved: approvedRes.count || 0,
+      onLeave: onLeaveRes.count || 0,
+      totalDays: 0,
+    });
+    setLoading(false);
+  }
+
   useEffect(() => {
-    async function fetchData() {
-      const today = new Date().toISOString().split('T')[0];
-      
-      const [requestsRes, pendingRes, approvedRes, onLeaveRes] = await Promise.all([
-        supabase
-          .from("leave_requests")
-          .select("id, leave_type, start_date, end_date, reason, status, employee:profiles!leave_requests_employee_id_fkey(first_name, last_name)")
-          .order("created_at", { ascending: false })
-          .limit(20),
-        supabase.from("leave_requests").select("id", { count: "exact" }).eq("status", "pending"),
-        supabase.from("leave_requests").select("id", { count: "exact" }).eq("status", "approved"),
-        supabase.from("leave_requests").select("id", { count: "exact" }).eq("status", "approved").lte("start_date", today).gte("end_date", today),
-      ]);
-
-      if (requestsRes.data) setLeaveRequests(requestsRes.data as LeaveRequest[]);
-      setStats({
-        pending: pendingRes.count || 0,
-        approved: approvedRes.count || 0,
-        onLeave: onLeaveRes.count || 0,
-        totalDays: 0,
-      });
-      setLoading(false);
-    }
-
     if (user) fetchData();
   }, [user]);
+
+  async function handleApprove(id: string) {
+    const { error } = await supabase
+      .from("leave_requests")
+      .update({ status: "approved", reviewed_at: new Date().toISOString() })
+      .eq("id", id);
+    
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Success", description: "Leave request approved" });
+      fetchData();
+    }
+  }
+
+  async function handleReject(id: string) {
+    const { error } = await supabase
+      .from("leave_requests")
+      .update({ status: "rejected", reviewed_at: new Date().toISOString() })
+      .eq("id", id);
+    
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Success", description: "Leave request rejected" });
+      fetchData();
+    }
+  }
 
   if (authLoading || loading) {
     return (
@@ -136,10 +167,7 @@ export default function Leave() {
       <Card className="glass-card">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-lg">Leave Requests</CardTitle>
-          <Button variant="gradient" size="sm">
-            <Calendar className="w-4 h-4 mr-2" />
-            Request Leave
-          </Button>
+          {user && <RequestLeaveDialog userId={user.id} onSuccess={fetchData} />}
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -200,10 +228,10 @@ export default function Leave() {
                     </Badge>
                     {request.status === "pending" && (
                       <div className="flex gap-2">
-                        <Button variant="success" size="sm">
+                        <Button variant="success" size="sm" onClick={() => handleApprove(request.id)}>
                           Approve
                         </Button>
-                        <Button variant="outline" size="sm">
+                        <Button variant="outline" size="sm" onClick={() => handleReject(request.id)}>
                           Reject
                         </Button>
                       </div>

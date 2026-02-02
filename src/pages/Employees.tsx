@@ -12,9 +12,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Grid3X3, List, Mail, Phone } from "lucide-react";
+import { Search, Grid3X3, List, Mail, Phone } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useRequireAuth } from "@/hooks/useAuth";
+import { AddEmployeeDialog } from "@/components/employees/AddEmployeeDialog";
 
 interface Employee {
   id: string;
@@ -36,18 +37,18 @@ export default function Employees() {
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
 
+  async function fetchData() {
+    const [employeesRes, deptRes] = await Promise.all([
+      supabase.from("profiles").select("id, first_name, last_name, email, position, phone, avatar_url, department:departments(name)"),
+      supabase.from("departments").select("id, name"),
+    ]);
+
+    if (employeesRes.data) setEmployees(employeesRes.data as Employee[]);
+    if (deptRes.data) setDepartments(deptRes.data);
+    setLoading(false);
+  }
+
   useEffect(() => {
-    async function fetchData() {
-      const [employeesRes, deptRes] = await Promise.all([
-        supabase.from("profiles").select("id, first_name, last_name, email, position, phone, avatar_url, department:departments(name)"),
-        supabase.from("departments").select("id, name"),
-      ]);
-
-      if (employeesRes.data) setEmployees(employeesRes.data as Employee[]);
-      if (deptRes.data) setDepartments(deptRes.data);
-      setLoading(false);
-    }
-
     if (user) fetchData();
   }, [user]);
 
@@ -119,10 +120,7 @@ export default function Employees() {
             </Button>
           </div>
 
-          <Button variant="gradient">
-            <Plus className="w-4 h-4 mr-2" />
-            Add Employee
-          </Button>
+          <AddEmployeeDialog departments={departments} onSuccess={fetchData} />
         </div>
       </div>
 

@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useRequireAuth } from "@/hooks/useAuth";
 import { format } from "date-fns";
+import { ClockInDialog } from "@/components/attendance/ClockInDialog";
 
 interface AttendanceRecord {
   id: string;
@@ -34,29 +35,30 @@ export default function Attendance() {
   const [stats, setStats] = useState({ clockedIn: 0, absent: 0, late: 0 });
   const [loading, setLoading] = useState(true);
 
+  async function fetchData() {
+    const today = new Date().toISOString().split('T')[0];
+    
+    const [recordsRes, presentRes, absentRes, lateRes] = await Promise.all([
+      supabase
+        .from("attendance_records")
+        .select("id, clock_in, clock_out, status, employee:profiles!attendance_records_employee_id_fkey(first_name, last_name, department:departments(name))")
+        .eq("record_date", today)
+        .order("clock_in", { ascending: false }),
+      supabase.from("attendance_records").select("id", { count: "exact" }).eq("record_date", today).eq("status", "present"),
+      supabase.from("attendance_records").select("id", { count: "exact" }).eq("record_date", today).eq("status", "absent"),
+      supabase.from("attendance_records").select("id", { count: "exact" }).eq("record_date", today).eq("status", "late"),
+    ]);
+
+    if (recordsRes.data) setRecords(recordsRes.data as AttendanceRecord[]);
+    setStats({
+      clockedIn: presentRes.count || 0,
+      absent: absentRes.count || 0,
+      late: lateRes.count || 0,
+    });
+    setLoading(false);
+  }
+
   useEffect(() => {
-    async function fetchData() {
-      const today = new Date().toISOString().split('T')[0];
-      
-      const [recordsRes, presentRes, absentRes] = await Promise.all([
-        supabase
-          .from("attendance_records")
-          .select("id, clock_in, clock_out, status, employee:profiles!attendance_records_employee_id_fkey(first_name, last_name, department:departments(name))")
-          .eq("record_date", today)
-          .order("clock_in", { ascending: false }),
-        supabase.from("attendance_records").select("id", { count: "exact" }).eq("record_date", today).eq("status", "present"),
-        supabase.from("attendance_records").select("id", { count: "exact" }).eq("record_date", today).eq("status", "absent"),
-      ]);
-
-      if (recordsRes.data) setRecords(recordsRes.data as AttendanceRecord[]);
-      setStats({
-        clockedIn: presentRes.count || 0,
-        absent: absentRes.count || 0,
-        late: 0,
-      });
-      setLoading(false);
-    }
-
     if (user) fetchData();
   }, [user]);
 
@@ -118,8 +120,9 @@ export default function Attendance() {
       </div>
 
       <Card className="glass-card">
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-lg">Today's Attendance</CardTitle>
+          {user && <ClockInDialog userId={user.id} onSuccess={fetchData} />}
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">

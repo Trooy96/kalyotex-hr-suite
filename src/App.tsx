@@ -9,6 +9,9 @@ import Employees from "./pages/Employees";
 import Attendance from "./pages/Attendance";
 import Leave from "./pages/Leave";
 import Departments from "./pages/Departments";
+import Payroll from "./pages/Payroll";
+import Recruitment from "./pages/Recruitment";
+import Documents from "./pages/Documents";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -27,7 +30,10 @@ const App = () => (
             <Route path="/employees" element={<Employees />} />
             <Route path="/attendance" element={<Attendance />} />
             <Route path="/leave" element={<Leave />} />
+            <Route path="/payroll" element={<Payroll />} />
+            <Route path="/recruitment" element={<Recruitment />} />
             <Route path="/departments" element={<Departments />} />
+            <Route path="/documents" element={<Documents />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

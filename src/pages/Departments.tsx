@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Plus, MoreVertical, Users } from "lucide-react";
+import { MoreVertical, Users } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { useRequireAuth } from "@/hooks/useAuth";
+import { AddDepartmentDialog } from "@/components/departments/AddDepartmentDialog";
 
 interface Department {
   id: string;
@@ -27,32 +28,32 @@ export default function Departments() {
   const [totalEmployees, setTotalEmployees] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function fetchData() {
-      const [deptRes, profilesRes] = await Promise.all([
-        supabase.from("departments").select("id, name, description"),
-        supabase.from("profiles").select("id, department_id"),
-      ]);
+  async function fetchData() {
+    const [deptRes, profilesRes] = await Promise.all([
+      supabase.from("departments").select("id, name, description"),
+      supabase.from("profiles").select("id, department_id"),
+    ]);
 
-      if (deptRes.data && profilesRes.data) {
-        const deptCounts = profilesRes.data.reduce((acc, profile) => {
-          if (profile.department_id) {
-            acc[profile.department_id] = (acc[profile.department_id] || 0) + 1;
-          }
-          return acc;
-        }, {} as Record<string, number>);
+    if (deptRes.data && profilesRes.data) {
+      const deptCounts = profilesRes.data.reduce((acc, profile) => {
+        if (profile.department_id) {
+          acc[profile.department_id] = (acc[profile.department_id] || 0) + 1;
+        }
+        return acc;
+      }, {} as Record<string, number>);
 
-        setDepartments(
-          deptRes.data.map((dept) => ({
-            ...dept,
-            employeeCount: deptCounts[dept.id] || 0,
-          }))
-        );
-        setTotalEmployees(profilesRes.data.length);
-      }
-      setLoading(false);
+      setDepartments(
+        deptRes.data.map((dept) => ({
+          ...dept,
+          employeeCount: deptCounts[dept.id] || 0,
+        }))
+      );
+      setTotalEmployees(profilesRes.data.length);
     }
+    setLoading(false);
+  }
 
+  useEffect(() => {
     if (user) fetchData();
   }, [user]);
 
@@ -84,10 +85,7 @@ export default function Departments() {
             {totalEmployees} Total Employees
           </Badge>
         </div>
-        <Button variant="gradient">
-          <Plus className="w-4 h-4 mr-2" />
-          Add Department
-        </Button>
+        <AddDepartmentDialog onSuccess={fetchData} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6">

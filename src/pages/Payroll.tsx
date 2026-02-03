@@ -13,19 +13,28 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   DollarSign,
   Download,
   Search,
   TrendingUp,
   CreditCard,
-  Calendar,
   CheckCircle,
   Clock,
+  FileText,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useRequireAuth } from "@/hooks/useAuth";
 import { format } from "date-fns";
+import { exportPayrollToPDF, exportIndividualPayslip } from "@/utils/payrollPdfExport";
+import { useToast } from "@/hooks/use-toast";
 
 interface PayrollRecord {
   id: string;
@@ -53,6 +62,7 @@ const statusStyles: Record<string, { bg: string; text: string; icon: React.Compo
 };
 
 export default function Payroll() {
+  const { toast } = useToast();
   const { user, loading: authLoading } = useRequireAuth();
   const [records, setRecords] = useState<PayrollRecord[]>([]);
   const [search, setSearch] = useState("");
@@ -199,10 +209,37 @@ export default function Payroll() {
                 <SelectItem value="paid">Paid</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" size="sm">
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Download className="w-4 h-4 mr-2" />
+                  Export PDF
+                  <ChevronDown className="w-4 h-4 ml-2" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => {
+                    if (filteredRecords.length === 0) {
+                      toast({
+                        title: "No records",
+                        description: "No payroll records to export",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    exportPayrollToPDF(filteredRecords);
+                    toast({
+                      title: "PDF Generated",
+                      description: "Payroll report has been downloaded",
+                    });
+                  }}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Export All Records
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button variant="gradient" size="sm">
               <DollarSign className="w-4 h-4 mr-2" />
               Run Payroll
@@ -221,6 +258,7 @@ export default function Payroll() {
                   <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Deductions</th>
                   <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Net Pay</th>
                   <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">Status</th>
+                  <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -278,12 +316,27 @@ export default function Payroll() {
                           {record.payment_status}
                         </Badge>
                       </td>
+                      <td className="py-3 px-4 text-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            exportIndividualPayslip(record);
+                            toast({
+                              title: "Payslip Generated",
+                              description: `Payslip for ${fullName} has been downloaded`,
+                            });
+                          }}
+                        >
+                          <FileText className="w-4 h-4" />
+                        </Button>
+                      </td>
                     </tr>
                   );
                 })}
                 {filteredRecords.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                    <td colSpan={8} className="py-8 text-center text-muted-foreground">
                       No payroll records found
                     </td>
                   </tr>

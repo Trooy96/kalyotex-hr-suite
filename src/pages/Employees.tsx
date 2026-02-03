@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Grid3X3, List, Mail, Phone } from "lucide-react";
+import { Search, Grid3X3, List, Mail, Phone, DollarSign } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useRequireAuth } from "@/hooks/useAuth";
 import { AddEmployeeDialog } from "@/components/employees/AddEmployeeDialog";
@@ -25,6 +25,7 @@ interface Employee {
   position: string | null;
   phone: string | null;
   avatar_url: string | null;
+  salary: number | null;
   department: { name: string } | null;
 }
 
@@ -39,7 +40,7 @@ export default function Employees() {
 
   async function fetchData() {
     const [employeesRes, deptRes] = await Promise.all([
-      supabase.from("profiles").select("id, first_name, last_name, email, position, phone, avatar_url, department:departments(name)"),
+      supabase.from("profiles").select("id, first_name, last_name, email, position, phone, avatar_url, salary, department:departments(name)"),
       supabase.from("departments").select("id, name"),
     ]);
 
@@ -168,6 +169,12 @@ export default function Employees() {
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Phone className="w-4 h-4" />
                       <span>{employee.phone}</span>
+                    </div>
+                  )}
+                  {employee.salary && (
+                    <div className="flex items-center gap-2 text-primary font-medium">
+                      <DollarSign className="w-4 h-4" />
+                      <span>{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(employee.salary)}/yr</span>
                     </div>
                   )}
                 </div>

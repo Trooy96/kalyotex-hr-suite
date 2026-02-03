@@ -77,8 +77,8 @@ export function AddEmployeeDialog({ departments, onSuccess }: AddEmployeeDialogP
         return;
       }
 
-      // For demo purposes, we'll insert directly
-      // In production, use proper auth flow
+      // Insert employee profile without user_id (they haven't signed up yet)
+      // When employee signs up, their profile will be linked via the handle_new_user trigger
       const { error } = await supabase.from("profiles").insert({
         email: formData.email,
         first_name: formData.first_name,
@@ -87,7 +87,6 @@ export function AddEmployeeDialog({ departments, onSuccess }: AddEmployeeDialogP
         phone: formData.phone || null,
         department_id: formData.department_id || null,
         hire_date: formData.hire_date || null,
-        user_id: crypto.randomUUID(), // Placeholder - in production use real auth
       });
 
       if (error) throw error;

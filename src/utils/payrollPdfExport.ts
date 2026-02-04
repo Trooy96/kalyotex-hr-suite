@@ -9,6 +9,14 @@ interface PayrollRecord {
   deductions: number | null;
   tax: number | null;
   net_pay: number;
+  gross_pay?: number | null;
+  housing_allowance?: number | null;
+  transport_allowance?: number | null;
+  lunch_allowance?: number | null;
+  other_allowances?: number | null;
+  napsa_employee?: number | null;
+  nhima_employee?: number | null;
+  paye?: number | null;
   payment_status: string | null;
   pay_period_start: string;
   pay_period_end: string;
@@ -28,20 +36,22 @@ interface CompanyInfo {
   phone: string;
   email: string;
   website?: string;
+  taxId?: string;
 }
 
 const defaultCompanyInfo: CompanyInfo = {
-  name: "HR Management System",
-  address: "123 Business Avenue, Suite 100, New York, NY 10001",
-  phone: "+1 (555) 123-4567",
-  email: "payroll@company.com",
-  website: "www.company.com",
+  name: "Kalyotex HR System",
+  address: "Plot 123 Great East Road, Lusaka, Zambia",
+  phone: "+260 211 123 456",
+  email: "payroll@kalyotex.co.zm",
+  website: "www.kalyotex.co.zm",
+  taxId: "TPIN: 1234567890",
 };
 
 const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("en-ZM", {
     style: "currency",
-    currency: "USD",
+    currency: "ZMW",
   }).format(amount);
 };
 
@@ -221,7 +231,7 @@ export function exportIndividualPayslip(
 
   // Company Header
   doc.setFillColor(37, 99, 235);
-  doc.rect(0, 0, pageWidth, 40, "F");
+  doc.rect(0, 0, pageWidth, 45, "F");
 
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(22);
@@ -232,12 +242,15 @@ export function exportIndividualPayslip(
   doc.setFont("helvetica", "normal");
   doc.text(companyInfo.address, 14, 26);
   doc.text(`Phone: ${companyInfo.phone} | Email: ${companyInfo.email}`, 14, 33);
+  if (companyInfo.taxId) {
+    doc.text(companyInfo.taxId, 14, 40);
+  }
 
   // Payslip Title
   doc.setTextColor(30, 41, 59);
   doc.setFontSize(20);
   doc.setFont("helvetica", "bold");
-  doc.text("PAYSLIP", 14, 55);
+  doc.text("PAYSLIP", 14, 60);
 
   doc.setFontSize(10);
   doc.setTextColor(100, 116, 139);
@@ -247,62 +260,95 @@ export function exportIndividualPayslip(
       "MMMM d, yyyy"
     )}`,
     14,
-    63
+    68
   );
 
   // Employee Info Box
   doc.setFillColor(248, 250, 252);
-  doc.roundedRect(14, 72, pageWidth - 28, 35, 3, 3, "F");
+  doc.roundedRect(14, 75, pageWidth - 28, 35, 3, 3, "F");
 
   doc.setFontSize(12);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(30, 41, 59);
-  doc.text("Employee Information", 20, 84);
+  doc.text("Employee Information", 20, 87);
 
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.text(`Name: ${fullName}`, 20, 93);
-  doc.text(`Position: ${record.employee?.position || "N/A"}`, 20, 100);
-  doc.text(`Department: ${record.employee?.department?.name || "N/A"}`, 110, 93);
+  doc.text(`Name: ${fullName}`, 20, 96);
+  doc.text(`Position: ${record.employee?.position || "N/A"}`, 20, 103);
+  doc.text(`Department: ${record.employee?.department?.name || "N/A"}`, 110, 96);
   doc.text(
     `Payment Date: ${record.payment_date ? format(new Date(record.payment_date), "MMMM d, yyyy") : "Pending"}`,
     110,
-    100
+    103
   );
 
   // Earnings Section
   doc.setFontSize(12);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(30, 41, 59);
-  doc.text("Earnings", 14, 120);
+  doc.text("Earnings", 14, 123);
+
+  const earningsData = [
+    ["Base Salary", formatCurrency(record.base_salary)],
+  ];
+  
+  if (record.housing_allowance) {
+    earningsData.push(["Housing Allowance", formatCurrency(record.housing_allowance)]);
+  }
+  if (record.transport_allowance) {
+    earningsData.push(["Transport Allowance", formatCurrency(record.transport_allowance)]);
+  }
+  if (record.lunch_allowance) {
+    earningsData.push(["Lunch Allowance", formatCurrency(record.lunch_allowance)]);
+  }
+  if (record.other_allowances) {
+    earningsData.push(["Other Allowances", formatCurrency(record.other_allowances)]);
+  }
+  if (record.bonuses) {
+    earningsData.push(["Bonuses", formatCurrency(record.bonuses)]);
+  }
 
   autoTable(doc, {
-    startY: 125,
+    startY: 128,
     head: [["Description", "Amount"]],
-    body: [
-      ["Base Salary", formatCurrency(record.base_salary)],
-      ["Bonuses", formatCurrency(record.bonuses || 0)],
-    ],
-    styles: { fontSize: 10 },
+    body: earningsData,
+    styles: { fontSize: 9 },
     headStyles: { fillColor: [34, 197, 94], textColor: [255, 255, 255] },
     columnStyles: { 1: { halign: "right" } },
     tableWidth: 90,
     margin: { left: 14 },
   });
 
-  // Deductions Section
+  // Deductions Section (Statutory)
   doc.setFontSize(12);
   doc.setFont("helvetica", "bold");
-  doc.text("Deductions", 110, 120);
+  doc.text("Statutory Deductions", 110, 123);
+
+  const deductionsData = [];
+  if (record.napsa_employee) {
+    deductionsData.push(["NAPSA (5%)", formatCurrency(record.napsa_employee)]);
+  }
+  if (record.nhima_employee) {
+    deductionsData.push(["NHIMA (1%)", formatCurrency(record.nhima_employee)]);
+  }
+  if (record.paye) {
+    deductionsData.push(["PAYE", formatCurrency(record.paye)]);
+  }
+  if (record.deductions && record.deductions > 0) {
+    deductionsData.push(["Other Deductions", formatCurrency(record.deductions)]);
+  }
+  
+  if (deductionsData.length === 0) {
+    deductionsData.push(["Deductions", formatCurrency(record.deductions || 0)]);
+    deductionsData.push(["Tax", formatCurrency(record.tax || 0)]);
+  }
 
   autoTable(doc, {
-    startY: 125,
+    startY: 128,
     head: [["Description", "Amount"]],
-    body: [
-      ["Deductions", formatCurrency(record.deductions || 0)],
-      ["Tax", formatCurrency(record.tax || 0)],
-    ],
-    styles: { fontSize: 10 },
+    body: deductionsData,
+    styles: { fontSize: 9 },
     headStyles: { fillColor: [239, 68, 68], textColor: [255, 255, 255] },
     columnStyles: { 1: { halign: "right" } },
     tableWidth: 86,
@@ -310,19 +356,22 @@ export function exportIndividualPayslip(
   });
 
   // Net Pay
-  const grossPay = record.base_salary + (record.bonuses || 0);
-  const totalDeductions = (record.deductions || 0) + (record.tax || 0);
+  const grossPay = record.gross_pay || (record.base_salary + (record.bonuses || 0) + 
+    (record.housing_allowance || 0) + (record.transport_allowance || 0) + 
+    (record.lunch_allowance || 0) + (record.other_allowances || 0));
+  const totalDeductions = (record.napsa_employee || 0) + (record.nhima_employee || 0) + 
+    (record.paye || 0) + (record.deductions || 0);
 
   doc.setFillColor(37, 99, 235);
-  doc.roundedRect(14, 175, pageWidth - 28, 30, 3, 3, "F");
+  doc.roundedRect(14, 195, pageWidth - 28, 35, 3, 3, "F");
 
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(10);
-  doc.text(`Gross Pay: ${formatCurrency(grossPay)}`, 20, 187);
-  doc.text(`Total Deductions: ${formatCurrency(totalDeductions)}`, 80, 187);
-  doc.setFontSize(14);
+  doc.text(`Gross Pay: ${formatCurrency(grossPay)}`, 20, 207);
+  doc.text(`Total Deductions: ${formatCurrency(totalDeductions)}`, 20, 217);
+  doc.setFontSize(16);
   doc.setFont("helvetica", "bold");
-  doc.text(`NET PAY: ${formatCurrency(record.net_pay)}`, 145, 193);
+  doc.text(`NET PAY: ${formatCurrency(record.net_pay)}`, 130, 215);
 
   // Footer
   doc.setFontSize(8);
@@ -330,16 +379,16 @@ export function exportIndividualPayslip(
   doc.text(
     "This is a computer-generated document. No signature is required.",
     pageWidth / 2,
-    220,
+    245,
     { align: "center" }
   );
   doc.text(
     `Generated on ${format(new Date(), "MMMM d, yyyy 'at' h:mm a")}`,
     pageWidth / 2,
-    226,
+    251,
     { align: "center" }
   );
-  doc.text(`Confidential - ${companyInfo.name}`, pageWidth / 2, 232, {
+  doc.text(`Confidential - ${companyInfo.name}`, pageWidth / 2, 257, {
     align: "center",
   });
 

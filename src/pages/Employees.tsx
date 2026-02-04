@@ -12,10 +12,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Grid3X3, List, Mail, Phone, DollarSign } from "lucide-react";
+import { Search, Grid3X3, List, Mail, Phone, DollarSign, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useRequireAuth } from "@/hooks/useAuth";
 import { AddEmployeeDialog } from "@/components/employees/AddEmployeeDialog";
+import { EmployeeDetailDialog } from "@/components/employees/EmployeeDetailDialog";
+import { formatZMW } from "@/utils/payrollCalculations";
 
 interface Employee {
   id: string;
@@ -26,6 +28,7 @@ interface Employee {
   phone: string | null;
   avatar_url: string | null;
   salary: number | null;
+  hire_date: string | null;
   department: { name: string } | null;
 }
 
@@ -37,10 +40,12 @@ export default function Employees() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
 
   async function fetchData() {
     const [employeesRes, deptRes] = await Promise.all([
-      supabase.from("profiles").select("id, first_name, last_name, email, position, phone, avatar_url, salary, department:departments(name)"),
+      supabase.from("profiles").select("id, first_name, last_name, email, position, phone, avatar_url, salary, hire_date, department:departments(name)"),
       supabase.from("departments").select("id, name"),
     ]);
 
@@ -174,9 +179,23 @@ export default function Employees() {
                   {employee.salary && (
                     <div className="flex items-center gap-2 text-primary font-medium">
                       <DollarSign className="w-4 h-4" />
-                      <span>{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(employee.salary)}/yr</span>
+                      <span>{formatZMW(employee.salary)}/mo</span>
                     </div>
                   )}
+                </div>
+                <div className="mt-4 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => {
+                      setSelectedEmployee(employee);
+                      setDetailDialogOpen(true);
+                    }}
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    View Details
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -191,10 +210,17 @@ export default function Employees() {
           </div>
           <h3 className="text-lg font-semibold mb-2">No employees found</h3>
           <p className="text-muted-foreground max-w-md">
-            Try adjusting your search or filter criteria.
+          Try adjusting your search or filter criteria.
           </p>
         </div>
       )}
+
+      <EmployeeDetailDialog
+        employee={selectedEmployee}
+        open={detailDialogOpen}
+        onOpenChange={setDetailDialogOpen}
+        onUpdate={fetchData}
+      />
     </AppLayout>
   );
 }

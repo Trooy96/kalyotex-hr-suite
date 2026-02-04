@@ -35,6 +35,8 @@ import { useRequireAuth } from "@/hooks/useAuth";
 import { format } from "date-fns";
 import { exportPayrollToPDF, exportIndividualPayslip } from "@/utils/payrollPdfExport";
 import { useToast } from "@/hooks/use-toast";
+import { RunPayrollDialog } from "@/components/payroll/RunPayrollDialog";
+import { formatZMW } from "@/utils/payrollCalculations";
 
 interface PayrollRecord {
   id: string;
@@ -43,6 +45,14 @@ interface PayrollRecord {
   deductions: number | null;
   tax: number | null;
   net_pay: number;
+  gross_pay: number | null;
+  housing_allowance: number | null;
+  transport_allowance: number | null;
+  lunch_allowance: number | null;
+  other_allowances: number | null;
+  napsa_employee: number | null;
+  nhima_employee: number | null;
+  paye: number | null;
   payment_status: string | null;
   pay_period_start: string;
   pay_period_end: string;
@@ -75,42 +85,44 @@ export default function Payroll() {
   });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function fetchData() {
-      const [recordsRes, pendingRes, paidRes] = await Promise.all([
-        supabase
-          .from("payroll_records")
-          .select(`
-            id, base_salary, bonuses, deductions, tax, net_pay, payment_status,
-            pay_period_start, pay_period_end, payment_date,
-            employee:profiles!payroll_records_employee_id_fkey(
-              first_name, last_name, position,
-              department:departments(name)
-            )
-          `)
-          .order("pay_period_end", { ascending: false })
-          .limit(50),
-        supabase.from("payroll_records").select("net_pay", { count: "exact" }).eq("payment_status", "pending"),
-        supabase.from("payroll_records").select("net_pay", { count: "exact" }).eq("payment_status", "paid"),
-      ]);
+  async function fetchData() {
+    const [recordsRes, pendingRes, paidRes] = await Promise.all([
+      supabase
+        .from("payroll_records")
+        .select(`
+          id, base_salary, bonuses, deductions, tax, net_pay, payment_status,
+          pay_period_start, pay_period_end, payment_date, gross_pay,
+          housing_allowance, transport_allowance, lunch_allowance, other_allowances,
+          napsa_employee, nhima_employee, paye,
+          employee:profiles!payroll_records_employee_id_fkey(
+            first_name, last_name, position,
+            department:departments(name)
+          )
+        `)
+        .order("pay_period_end", { ascending: false })
+        .limit(50),
+      supabase.from("payroll_records").select("net_pay", { count: "exact" }).eq("payment_status", "pending"),
+      supabase.from("payroll_records").select("net_pay", { count: "exact" }).eq("payment_status", "paid"),
+    ]);
 
-      if (recordsRes.data) {
-        const data = recordsRes.data as PayrollRecord[];
-        setRecords(data);
-        
-        const totalPayroll = data.reduce((sum, r) => sum + r.net_pay, 0);
-        const avgSalary = data.length > 0 ? totalPayroll / data.length : 0;
-        
-        setStats({
-          totalPayroll,
-          pending: pendingRes.count || 0,
-          paid: paidRes.count || 0,
-          avgSalary,
-        });
-      }
-      setLoading(false);
+    if (recordsRes.data) {
+      const data = recordsRes.data as PayrollRecord[];
+      setRecords(data);
+      
+      const totalPayroll = data.reduce((sum, r) => sum + r.net_pay, 0);
+      const avgSalary = data.length > 0 ? totalPayroll / data.length : 0;
+      
+      setStats({
+        totalPayroll,
+        pending: pendingRes.count || 0,
+        paid: paidRes.count || 0,
+        avgSalary,
+      });
     }
+    setLoading(false);
+  }
 
+  useEffect(() => {
     if (user) fetchData();
   }, [user]);
 
@@ -121,12 +133,7 @@ export default function Payroll() {
     return matchesSearch && matchesStatus;
   });
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number) => formatZMW(amount);
 
   if (authLoading || loading) {
     return (
@@ -240,10 +247,7 @@ export default function Payroll() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button variant="gradient" size="sm">
-              <DollarSign className="w-4 h-4 mr-2" />
-              Run Payroll
-            </Button>
+            <RunPayrollDialog onSuccess={fetchData} />
           </div>
         </CardHeader>
         <CardContent>

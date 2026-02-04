@@ -13,19 +13,21 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  LogOut,
-  Bell,
+  BarChart3,
+  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-const navigation = [
+const navigation: { name: string; href: string; icon: typeof LayoutDashboard; badge?: string }[] = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Employees", href: "/employees", icon: Users, badge: "156" },
+  { name: "Employees", href: "/employees", icon: Users },
   { name: "Attendance", href: "/attendance", icon: Clock },
-  { name: "Leave Management", href: "/leave", icon: Calendar, badge: "5" },
+  { name: "Leave Management", href: "/leave", icon: Calendar },
   { name: "Payroll", href: "/payroll", icon: DollarSign },
-  { name: "Recruitment", href: "/recruitment", icon: Briefcase, badge: "12" },
+  { name: "Performance", href: "/performance", icon: Star },
+  { name: "Reports", href: "/reports", icon: BarChart3 },
+  { name: "Recruitment", href: "/recruitment", icon: Briefcase },
   { name: "Departments", href: "/departments", icon: Building2 },
   { name: "Documents", href: "/documents", icon: FileText },
 ];

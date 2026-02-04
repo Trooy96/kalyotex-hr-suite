@@ -12,6 +12,8 @@ import Departments from "./pages/Departments";
 import Payroll from "./pages/Payroll";
 import Recruitment from "./pages/Recruitment";
 import Documents from "./pages/Documents";
+import Reports from "./pages/Reports";
+import PerformanceReviews from "./pages/PerformanceReviews";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -34,6 +36,8 @@ const App = () => (
             <Route path="/recruitment" element={<Recruitment />} />
             <Route path="/departments" element={<Departments />} />
             <Route path="/documents" element={<Documents />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/performance" element={<PerformanceReviews />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

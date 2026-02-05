@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,19 +17,21 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+   const [searchParams] = useSearchParams();
+   const defaultTab = searchParams.get("tab") === "signup" ? "signup" : "signin";
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (session) {
-          navigate("/");
+          navigate("/get-started");
         }
       }
     );
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        navigate("/");
+        navigate("/get-started");
       }
     });
 
@@ -96,19 +98,29 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-background to-primary/5">
+      {/* Header */}
+      <header className="border-b bg-background/80 backdrop-blur-sm">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate("/")}>
+            <div className="p-2 rounded-lg bg-primary/10">
+              <Users className="w-6 h-6 text-primary" />
+            </div>
+            <span className="text-xl font-bold">HR Platform</span>
+          </div>
+        </div>
+      </header>
+
+      <div className="flex-1 flex items-center justify-center p-4">
       <Card className="w-full max-w-md glass-card">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 p-3 rounded-xl bg-primary/10 w-fit">
-            <Users className="w-8 h-8 text-primary" />
-          </div>
           <CardTitle className="text-2xl">HR Platform</CardTitle>
           <CardDescription>
             Sign in to access your HR dashboard
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="signin" className="w-full">
+          <Tabs defaultValue={defaultTab} className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="signin">Sign In</TabsTrigger>
               <TabsTrigger value="signup">Sign Up</TabsTrigger>
@@ -201,6 +213,7 @@ export default function Auth() {
           </Tabs>
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

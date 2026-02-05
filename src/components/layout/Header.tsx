@@ -1,8 +1,11 @@
-import { Bell, Search, Menu } from "lucide-react";
+import { Bell, Search, Menu, LogOut, Building2, UserPlus } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,6 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import InviteUserDialog from "@/components/company/InviteUserDialog";
 
 interface HeaderProps {
   title: string;
@@ -19,8 +23,56 @@ interface HeaderProps {
 }
 
 export function Header({ title, subtitle, onMenuClick }: HeaderProps) {
+  const navigate = useNavigate();
+  const [user, setUser] = useState<any>(null);
+  const [company, setCompany] = useState<any>(null);
+  const [membership, setMembership] = useState<any>(null);
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
+
+  useEffect(() => {
+    const fetchUserAndCompany = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+
+      const selectedCompanyId = localStorage.getItem("selectedCompanyId");
+      if (selectedCompanyId && user) {
+        const { data: companyData } = await supabase
+          .from("companies")
+          .select("*")
+          .eq("id", selectedCompanyId)
+          .single();
+        setCompany(companyData);
+
+        const { data: membershipData } = await supabase
+          .from("company_memberships")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("company_id", selectedCompanyId)
+          .single();
+        setMembership(membershipData);
+      }
+    };
+
+    fetchUserAndCompany();
+  }, []);
+
+  const handleSignOut = async () => {
+    localStorage.removeItem("selectedCompanyId");
+    await supabase.auth.signOut();
+    navigate("/landing");
+  };
+
+  const handleSwitchCompany = () => {
+    localStorage.removeItem("selectedCompanyId");
+    navigate("/get-started");
+  };
+
+  const isSuperAdmin = membership?.role === "super_admin";
+  const userInitials = user?.email?.slice(0, 2).toUpperCase() || "U";
+
   return (
-    <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-md border-b border-border">
+    <>
+      <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-md border-b border-border">
       <div className="flex items-center justify-between h-16 px-4 lg:px-6">
         {/* Left Section */}
         <div className="flex items-center gap-4">
@@ -34,8 +86,10 @@ export function Header({ title, subtitle, onMenuClick }: HeaderProps) {
           </Button>
           <div>
             <h1 className="text-xl font-semibold text-foreground">{title}</h1>
-            {subtitle && (
-              <p className="text-sm text-muted-foreground">{subtitle}</p>
+            {(subtitle || company) && (
+              <p className="text-sm text-muted-foreground">
+                {subtitle || company?.name}
+              </p>
             )}
           </div>
         </div>
@@ -53,6 +107,18 @@ export function Header({ title, subtitle, onMenuClick }: HeaderProps) {
 
         {/* Right Section */}
         <div className="flex items-center gap-3">
+          {/* Invite User - Super Admin only */}
+          {isSuperAdmin && company && (
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => setShowInviteDialog(true)}
+            >
+              <UserPlus className="w-4 h-4 mr-2" />
+              Invite
+            </Button>
+          )}
+
           {/* Notifications */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -94,13 +160,13 @@ export function Header({ title, subtitle, onMenuClick }: HeaderProps) {
                 <Avatar className="h-8 w-8">
                   <AvatarImage src="/placeholder.svg" />
                   <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-                    AD
+                    {userInitials}
                   </AvatarFallback>
                 </Avatar>
                 <div className="hidden lg:flex flex-col items-start">
-                  <span className="text-sm font-medium">Admin User</span>
+                  <span className="text-sm font-medium">{user?.email}</span>
                   <span className="text-xs text-muted-foreground">
-                    HR Manager
+                    {membership?.role?.replace("_", " ") || "Loading..."}
                   </span>
                 </div>
               </Button>
@@ -108,16 +174,29 @@ export function Header({ title, subtitle, onMenuClick }: HeaderProps) {
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>Profile</DropdownMenuItem>
-              <DropdownMenuItem>Settings</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleSwitchCompany}>
+                <Building2 className="w-4 h-4 mr-2" />
+                Switch Company
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive">
-                Log out
+              <DropdownMenuItem className="text-destructive" onClick={handleSignOut}>
+                <LogOut className="w-4 h-4 mr-2" />
+                Log Out
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </div>
     </header>
+
+      {company && (
+        <InviteUserDialog
+          open={showInviteDialog}
+          onOpenChange={setShowInviteDialog}
+          companyId={company.id}
+          companyName={company.name}
+        />
+      )}
+    </>
   );
 }

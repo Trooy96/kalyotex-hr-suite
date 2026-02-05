@@ -4,6 +4,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
+import Landing from "./pages/Landing";
+import GetStarted from "./pages/GetStarted";
 import Index from "./pages/Index";
 import Employees from "./pages/Employees";
 import Attendance from "./pages/Attendance";
@@ -27,8 +29,10 @@ const App = () => (
           <Toaster />
           <Sonner />
           <Routes>
+            <Route path="/landing" element={<Landing />} />
+            <Route path="/get-started" element={<GetStarted />} />
             <Route path="/auth" element={<Auth />} />
-            <Route path="/" element={<Index />} />
+            <Route path="/" element={<ProtectedIndex />} />
             <Route path="/employees" element={<Employees />} />
             <Route path="/attendance" element={<Attendance />} />
             <Route path="/leave" element={<Leave />} />
@@ -47,3 +51,14 @@ const App = () => (
 );
 
 export default App;
+
+// Protected route wrapper that checks for company selection
+function ProtectedIndex() {
+  const selectedCompanyId = localStorage.getItem("selectedCompanyId");
+  
+  if (!selectedCompanyId) {
+    return <GetStarted />;
+  }
+  
+  return <Index />;
+}

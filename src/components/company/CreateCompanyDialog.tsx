@@ -32,57 +32,40 @@
    const [loading, setLoading] = useState(false);
    const { toast } = useToast();
  
-   const handleSubmit = async (e: React.FormEvent) => {
-     e.preventDefault();
-     setLoading(true);
- 
-     try {
-       const { data: { user } } = await supabase.auth.getUser();
-       if (!user) throw new Error("Not authenticated");
- 
-       // Create the company
-       const { data: company, error: companyError } = await supabase
-         .from("companies")
-         .insert({
-           name,
-           address: address || null,
-           phone: phone || null,
-           email: email || null,
-           created_by: user.id,
-         })
-         .select()
-         .single();
- 
-       if (companyError) throw companyError;
- 
-       // Add user as super_admin
-       const { error: membershipError } = await supabase
-         .from("company_memberships")
-         .insert({
-           user_id: user.id,
-           company_id: company.id,
-           role: "super_admin",
-         });
- 
-       if (membershipError) throw membershipError;
- 
-       // Reset form
-       setName("");
-       setAddress("");
-       setPhone("");
-       setEmail("");
-       
-       onSuccess();
-     } catch (error: any) {
-       toast({
-         variant: "destructive",
-         title: "Error creating company",
-         description: error.message,
-       });
-     } finally {
-       setLoading(false);
-     }
-   };
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("create-company", {
+        body: {
+          name,
+          address,
+          phone,
+          email,
+        },
+      });
+
+      if (error) throw error;
+      if (!data?.company?.id) throw new Error("Company creation failed");
+
+      // Reset form
+      setName("");
+      setAddress("");
+      setPhone("");
+      setEmail("");
+
+      onSuccess();
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error creating company",
+        description: error.message,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
  
    return (
      <Dialog open={open} onOpenChange={onOpenChange}>

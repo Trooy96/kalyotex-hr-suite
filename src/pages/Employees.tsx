@@ -45,7 +45,7 @@ export default function Employees() {
 
   async function fetchData() {
     const [employeesRes, deptRes] = await Promise.all([
-      supabase.from("profiles").select("id, first_name, last_name, email, position, phone, avatar_url, salary, hire_date, department:departments(name)"),
+      supabase.from("profiles").select("id, first_name, last_name, email, position, phone, avatar_url, salary, hire_date, department_id, department:departments(name)"),
       supabase.from("departments").select("id, name"),
     ]);
 

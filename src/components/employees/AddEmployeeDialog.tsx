@@ -42,6 +42,7 @@ export function AddEmployeeDialog({ departments, onSuccess }: AddEmployeeDialogP
     phone: "",
     department_id: "",
     hire_date: new Date().toISOString().split("T")[0],
+    salary: "",
   });
 
   const handleSubmit = async () => {
@@ -87,6 +88,7 @@ export function AddEmployeeDialog({ departments, onSuccess }: AddEmployeeDialogP
         phone: formData.phone || null,
         department_id: formData.department_id || null,
         hire_date: formData.hire_date || null,
+        salary: formData.salary ? parseFloat(formData.salary) : null,
       });
 
       if (error) throw error;
@@ -105,6 +107,7 @@ export function AddEmployeeDialog({ departments, onSuccess }: AddEmployeeDialogP
         phone: "",
         department_id: "",
         hire_date: new Date().toISOString().split("T")[0],
+        salary: "",
       });
       onSuccess();
     } catch (error: any) {
@@ -184,6 +187,7 @@ export function AddEmployeeDialog({ departments, onSuccess }: AddEmployeeDialogP
             </div>
           </div>
 
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Department</Label>
@@ -213,6 +217,18 @@ export function AddEmployeeDialog({ departments, onSuccess }: AddEmployeeDialogP
               />
             </div>
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="salary">Salary (ZMW)</Label>
+            <Input
+              id="salary"
+              type="number"
+              value={formData.salary}
+              onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
+              placeholder="e.g. 15000"
+            />
+          </div>
+
 
           <Button
             className="w-full"

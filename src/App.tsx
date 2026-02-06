@@ -16,6 +16,7 @@ import Recruitment from "./pages/Recruitment";
 import Documents from "./pages/Documents";
 import Reports from "./pages/Reports";
 import PerformanceReviews from "./pages/PerformanceReviews";
+import Settings from "./pages/Settings";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -42,6 +43,7 @@ const App = () => (
             <Route path="/documents" element={<Documents />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/performance" element={<PerformanceReviews />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

@@ -27,9 +27,13 @@ import {
   Plus,
   Trash2,
   Briefcase,
+  Edit,
+  Save,
+  Loader2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useUserRole } from "@/hooks/useUserRole";
 import { format } from "date-fns";
 import { formatZMW } from "@/utils/payrollCalculations";
 
@@ -44,6 +48,7 @@ interface Employee {
   salary: number | null;
   hire_date: string | null;
   department: { name: string } | null;
+  department_id?: string | null;
 }
 
 interface Contract {
@@ -70,6 +75,11 @@ interface EmergencyContact {
   is_primary: boolean;
 }
 
+interface Department {
+  id: string;
+  name: string;
+}
+
 interface Props {
   employee: Employee | null;
   open: boolean;
@@ -79,9 +89,27 @@ interface Props {
 
 export function EmployeeDetailDialog({ employee, open, onOpenChange, onUpdate }: Props) {
   const { toast } = useToast();
+  const { isAdmin, isManager } = useUserRole();
+  const canEdit = isAdmin || isManager;
+
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContact[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const [editForm, setEditForm] = useState({
+    first_name: "",
+    last_name: "",
+    email: "",
+    phone: "",
+    position: "",
+    salary: "",
+    hire_date: "",
+    department_id: "",
+  });
+
   const [newContact, setNewContact] = useState({
     name: "",
     relationship: "",
@@ -95,6 +123,16 @@ export function EmployeeDetailDialog({ employee, open, onOpenChange, onUpdate }:
   useEffect(() => {
     if (employee && open) {
       fetchEmployeeDetails();
+      setEditForm({
+        first_name: employee.first_name || "",
+        last_name: employee.last_name || "",
+        email: employee.email || "",
+        phone: employee.phone || "",
+        position: employee.position || "",
+        salary: employee.salary?.toString() || "",
+        hire_date: employee.hire_date || "",
+        department_id: (employee as any).department_id || "",
+      });
     }
   }, [employee, open]);
 
@@ -102,7 +140,7 @@ export function EmployeeDetailDialog({ employee, open, onOpenChange, onUpdate }:
     if (!employee) return;
     setLoading(true);
 
-    const [contractsRes, contactsRes] = await Promise.all([
+    const [contractsRes, contactsRes, deptRes, profileRes] = await Promise.all([
       supabase
         .from("employee_contracts")
         .select("*")
@@ -113,12 +151,52 @@ export function EmployeeDetailDialog({ employee, open, onOpenChange, onUpdate }:
         .select("*")
         .eq("employee_id", employee.id)
         .order("is_primary", { ascending: false }),
+      supabase.from("departments").select("id, name"),
+      supabase.from("profiles").select("department_id").eq("id", employee.id).single(),
     ]);
 
     if (contractsRes.data) setContracts(contractsRes.data);
     if (contactsRes.data) setEmergencyContacts(contactsRes.data);
+    if (deptRes.data) setDepartments(deptRes.data);
+    if (profileRes.data) {
+      setEditForm(prev => ({ ...prev, department_id: profileRes.data.department_id || "" }));
+    }
     setLoading(false);
   }
+
+  const handleSaveEmployee = async () => {
+    if (!employee) return;
+
+    setSaving(true);
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        first_name: editForm.first_name || null,
+        last_name: editForm.last_name || null,
+        phone: editForm.phone || null,
+        position: editForm.position || null,
+        salary: editForm.salary ? parseFloat(editForm.salary) : null,
+        hire_date: editForm.hire_date || null,
+        department_id: editForm.department_id || null,
+      })
+      .eq("id", employee.id);
+
+    if (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    } else {
+      toast({
+        title: "Employee Updated",
+        description: "Employee information has been saved.",
+      });
+      setEditing(false);
+      onUpdate();
+    }
+    setSaving(false);
+  };
 
   const handleAddEmergencyContact = async () => {
     if (!employee || !newContact.name || !newContact.relationship || !newContact.phone) {
@@ -192,19 +270,27 @@ export function EmployeeDetailDialog({ employee, open, onOpenChange, onUpdate }:
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
-            <Avatar className="h-12 w-12">
-              <AvatarImage src={employee.avatar_url || undefined} />
-              <AvatarFallback className="bg-primary/10 text-primary">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
-            <div>
-              <p>{fullName}</p>
-              <p className="text-sm font-normal text-muted-foreground">
-                {employee.position || "No position"} • {employee.department?.name || "No department"}
-              </p>
+          <DialogTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Avatar className="h-12 w-12">
+                <AvatarImage src={employee.avatar_url || undefined} />
+                <AvatarFallback className="bg-primary/10 text-primary">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <p>{fullName}</p>
+                <p className="text-sm font-normal text-muted-foreground">
+                  {employee.position || "No position"} • {employee.department?.name || "No department"}
+                </p>
+              </div>
             </div>
+            {canEdit && !editing && (
+              <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+                <Edit className="w-4 h-4 mr-2" />
+                Edit
+              </Button>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -230,27 +316,126 @@ export function EmployeeDetailDialog({ employee, open, onOpenChange, onUpdate }:
 
           <TabsContent value="profile" className="space-y-4">
             <Card>
-              <CardContent className="pt-6 grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-muted-foreground">Email</Label>
-                  <p className="font-medium">{employee.email}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Phone</Label>
-                  <p className="font-medium">{employee.phone || "Not provided"}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Hire Date</Label>
-                  <p className="font-medium">
-                    {employee.hire_date
-                      ? format(new Date(employee.hire_date), "MMMM d, yyyy")
-                      : "Not set"}
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Department</Label>
-                  <p className="font-medium">{employee.department?.name || "None"}</p>
-                </div>
+              <CardContent className="pt-6">
+                {editing ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>First Name</Label>
+                        <Input
+                          value={editForm.first_name}
+                          onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Last Name</Label>
+                        <Input
+                          value={editForm.last_name}
+                          onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Email</Label>
+                      <Input value={editForm.email} disabled className="bg-muted" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Phone</Label>
+                        <Input
+                          value={editForm.phone}
+                          onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Position</Label>
+                        <Input
+                          value={editForm.position}
+                          onChange={(e) => setEditForm({ ...editForm, position: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Salary (ZMW)</Label>
+                        <Input
+                          type="number"
+                          value={editForm.salary}
+                          onChange={(e) => setEditForm({ ...editForm, salary: e.target.value })}
+                          placeholder="e.g. 15000"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Hire Date</Label>
+                        <Input
+                          type="date"
+                          value={editForm.hire_date}
+                          onChange={(e) => setEditForm({ ...editForm, hire_date: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Department</Label>
+                      <Select
+                        value={editForm.department_id}
+                        onValueChange={(v) => setEditForm({ ...editForm, department_id: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select department" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {departments.map((dept) => (
+                            <SelectItem key={dept.id} value={dept.id}>
+                              {dept.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button onClick={handleSaveEmployee} disabled={saving}>
+                        {saving ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Save className="w-4 h-4 mr-2" />
+                        )}
+                        Save Changes
+                      </Button>
+                      <Button variant="outline" onClick={() => setEditing(false)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-muted-foreground">Email</Label>
+                      <p className="font-medium">{employee.email}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Phone</Label>
+                      <p className="font-medium">{employee.phone || "Not provided"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Hire Date</Label>
+                      <p className="font-medium">
+                        {employee.hire_date
+                          ? format(new Date(employee.hire_date), "MMMM d, yyyy")
+                          : "Not set"}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Department</Label>
+                      <p className="font-medium">{employee.department?.name || "None"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Salary</Label>
+                      <p className="font-medium text-primary">
+                        {employee.salary ? formatZMW(employee.salary) : "Not set"}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -350,9 +535,16 @@ export function EmployeeDetailDialog({ employee, open, onOpenChange, onUpdate }:
                       </span>
                     </div>
                   </div>
+                ) : employee.salary ? (
+                  <div className="space-y-3">
+                    <div className="flex justify-between py-2 font-bold text-lg">
+                      <span>Monthly Salary</span>
+                      <span className="text-primary">{formatZMW(employee.salary)}</span>
+                    </div>
+                  </div>
                 ) : (
                   <div className="text-center py-4 text-muted-foreground">
-                    No active contract found
+                    No salary information available
                   </div>
                 )}
               </CardContent>

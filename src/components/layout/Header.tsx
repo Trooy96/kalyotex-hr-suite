@@ -1,4 +1,4 @@
-import { Bell, Search, Menu, LogOut, Building2, UserPlus } from "lucide-react";
+import { Bell, Search, Menu, LogOut, Building2, Settings } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import InviteUserDialog from "@/components/company/InviteUserDialog";
 
 interface HeaderProps {
   title: string;
@@ -27,7 +26,6 @@ export function Header({ title, subtitle, onMenuClick }: HeaderProps) {
   const [user, setUser] = useState<any>(null);
   const [company, setCompany] = useState<any>(null);
   const [membership, setMembership] = useState<any>(null);
-  const [showInviteDialog, setShowInviteDialog] = useState(false);
 
   useEffect(() => {
     const fetchUserAndCompany = async () => {
@@ -67,12 +65,10 @@ export function Header({ title, subtitle, onMenuClick }: HeaderProps) {
     navigate("/get-started");
   };
 
-  const isSuperAdmin = membership?.role === "super_admin";
   const userInitials = user?.email?.slice(0, 2).toUpperCase() || "U";
 
   return (
-    <>
-      <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-md border-b border-border">
+    <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-md border-b border-border">
       <div className="flex items-center justify-between h-16 px-4 lg:px-6">
         {/* Left Section */}
         <div className="flex items-center gap-4">
@@ -107,18 +103,6 @@ export function Header({ title, subtitle, onMenuClick }: HeaderProps) {
 
         {/* Right Section */}
         <div className="flex items-center gap-3">
-          {/* Invite User - Super Admin only */}
-          {isSuperAdmin && company && (
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => setShowInviteDialog(true)}
-            >
-              <UserPlus className="w-4 h-4 mr-2" />
-              Invite
-            </Button>
-          )}
-
           {/* Notifications */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -174,6 +158,10 @@ export function Header({ title, subtitle, onMenuClick }: HeaderProps) {
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => navigate("/settings")}>
+                <Settings className="w-4 h-4 mr-2" />
+                Settings
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={handleSwitchCompany}>
                 <Building2 className="w-4 h-4 mr-2" />
                 Switch Company
@@ -188,15 +176,5 @@ export function Header({ title, subtitle, onMenuClick }: HeaderProps) {
         </div>
       </div>
     </header>
-
-      {company && (
-        <InviteUserDialog
-          open={showInviteDialog}
-          onOpenChange={setShowInviteDialog}
-          companyId={company.id}
-          companyName={company.name}
-        />
-      )}
-    </>
   );
 }

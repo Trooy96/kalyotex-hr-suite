@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export function CompanyProfileSettings({ company }: Props) {
+  const { user } = useAuth();
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -81,10 +83,10 @@ export function CompanyProfileSettings({ company }: Props) {
 
     setUploading(true);
     const fileExt = file.name.split(".").pop();
-    const filePath = `company-logos/${company.id}.${fileExt}`;
+    const filePath = `${company.id}/${Date.now()}.${fileExt}`;
 
     const { error: uploadError } = await supabase.storage
-      .from("documents")
+      .from("company-assets")
       .upload(filePath, file, { upsert: true });
 
     if (uploadError) {
@@ -98,7 +100,7 @@ export function CompanyProfileSettings({ company }: Props) {
     }
 
     const { data: urlData } = supabase.storage
-      .from("documents")
+      .from("company-assets")
       .getPublicUrl(filePath);
 
     const { error: updateError } = await supabase

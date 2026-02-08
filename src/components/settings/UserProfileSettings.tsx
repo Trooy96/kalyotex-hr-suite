@@ -25,6 +25,7 @@ interface Profile {
   position: string | null;
   avatar_url: string | null;
   department_id: string | null;
+  salary: number | null;
 }
 
 interface Department {
@@ -47,6 +48,7 @@ export function UserProfileSettings() {
     phone: "",
     position: "",
     department_id: "",
+    salary: "",
   });
 
   useEffect(() => {
@@ -70,6 +72,7 @@ export function UserProfileSettings() {
           phone: profileRes.data.phone || "",
           position: profileRes.data.position || "",
           department_id: profileRes.data.department_id || "",
+          salary: profileRes.data.salary?.toString() || "",
         });
       }
 
@@ -95,6 +98,7 @@ export function UserProfileSettings() {
         phone: formData.phone || null,
         position: formData.position || null,
         department_id: formData.department_id || null,
+        salary: formData.salary ? parseFloat(formData.salary) : null,
       })
       .eq("id", profile.id);
 
@@ -115,14 +119,14 @@ export function UserProfileSettings() {
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !profile) return;
+    if (!file || !user) return;
 
     setUploading(true);
     const fileExt = file.name.split(".").pop();
-    const filePath = `avatars/${profile.id}.${fileExt}`;
+    const filePath = `${user.id}/${Date.now()}.${fileExt}`;
 
     const { error: uploadError } = await supabase.storage
-      .from("documents")
+      .from("avatars")
       .upload(filePath, file, { upsert: true });
 
     if (uploadError) {
@@ -136,26 +140,28 @@ export function UserProfileSettings() {
     }
 
     const { data: urlData } = supabase.storage
-      .from("documents")
+      .from("avatars")
       .getPublicUrl(filePath);
 
-    const { error: updateError } = await supabase
-      .from("profiles")
-      .update({ avatar_url: urlData.publicUrl })
-      .eq("id", profile.id);
+    if (profile) {
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: urlData.publicUrl })
+        .eq("id", profile.id);
 
-    if (updateError) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: updateError.message,
-      });
-    } else {
-      setProfile({ ...profile, avatar_url: urlData.publicUrl });
-      toast({
-        title: "Avatar Updated",
-        description: "Your profile picture has been updated.",
-      });
+      if (updateError) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: updateError.message,
+        });
+      } else {
+        setProfile({ ...profile, avatar_url: urlData.publicUrl });
+        toast({
+          title: "Avatar Updated",
+          description: "Your profile picture has been updated.",
+        });
+      }
     }
     setUploading(false);
   };
@@ -273,23 +279,35 @@ export function UserProfileSettings() {
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="department">Department</Label>
-            <Select
-              value={formData.department_id}
-              onValueChange={(v) => setFormData({ ...formData, department_id: v })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select your department" />
-              </SelectTrigger>
-              <SelectContent>
-                {departments.map((dept) => (
-                  <SelectItem key={dept.id} value={dept.id}>
-                    {dept.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="department">Department</Label>
+              <Select
+                value={formData.department_id}
+                onValueChange={(v) => setFormData({ ...formData, department_id: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select your department" />
+                </SelectTrigger>
+                <SelectContent>
+                  {departments.map((dept) => (
+                    <SelectItem key={dept.id} value={dept.id}>
+                      {dept.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="salary">Salary (ZMW)</Label>
+              <Input
+                id="salary"
+                type="number"
+                value={formData.salary}
+                onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
+                placeholder="e.g. 15000"
+              />
+            </div>
           </div>
 
           <Button onClick={handleSave} disabled={saving}>

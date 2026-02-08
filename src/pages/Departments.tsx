@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { useRequireAuth } from "@/hooks/useAuth";
+import { useUserRole } from "@/hooks/useUserRole";
 import { AddDepartmentDialog } from "@/components/departments/AddDepartmentDialog";
 
 interface Department {
@@ -24,6 +25,8 @@ interface Department {
 
 export default function Departments() {
   const { user, loading: authLoading } = useRequireAuth();
+  const { isAdmin, isManager } = useUserRole();
+  const canEdit = isAdmin || isManager;
   const [departments, setDepartments] = useState<Department[]>([]);
   const [totalEmployees, setTotalEmployees] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -85,7 +88,7 @@ export default function Departments() {
             {totalEmployees} Total Employees
           </Badge>
         </div>
-        <AddDepartmentDialog onSuccess={fetchData} />
+        {canEdit && <AddDepartmentDialog onSuccess={fetchData} />}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6">
@@ -113,18 +116,20 @@ export default function Departments() {
                       </p>
                     </div>
                   </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreVertical className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem>View Details</DropdownMenuItem>
-                      <DropdownMenuItem>Edit Department</DropdownMenuItem>
-                      <DropdownMenuItem>View Employees</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  {canEdit && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreVertical className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem>View Details</DropdownMenuItem>
+                        <DropdownMenuItem>Edit Department</DropdownMenuItem>
+                        <DropdownMenuItem>View Employees</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                 </div>
 
                 <div className="space-y-4">

@@ -28,7 +28,6 @@ import {
   CheckCircle,
   Plus,
   Search,
-  MapPin,
   Building2,
   Calendar,
   Mail,
@@ -38,6 +37,7 @@ import {
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useRequireAuth } from "@/hooks/useAuth";
+import { useUserRole } from "@/hooks/useUserRole";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 
@@ -79,6 +79,8 @@ const statusStyles: Record<string, { bg: string; text: string }> = {
 
 export default function Recruitment() {
   const { user, loading: authLoading } = useRequireAuth();
+  const { isAdmin, isManager } = useUserRole();
+  const canEdit = isAdmin || isManager;
   const { toast } = useToast();
   const [jobs, setJobs] = useState<JobPosting[]>([]);
   const [applications, setApplications] = useState<JobApplication[]>([]);
@@ -245,88 +247,90 @@ export default function Recruitment() {
                 className="pl-10 w-[200px]"
               />
             </div>
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="gradient">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Post Job
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[500px]">
-                <DialogHeader>
-                  <DialogTitle>Create Job Posting</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="title">Job Title *</Label>
-                    <Input
-                      id="title"
-                      value={newJob.title}
-                      onChange={(e) => setNewJob({ ...newJob, title: e.target.value })}
-                      placeholder="e.g. Senior Software Engineer"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Department</Label>
-                      <Select value={newJob.department_id} onValueChange={(v) => setNewJob({ ...newJob, department_id: v })}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {departments.map((d) => (
-                            <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Employment Type</Label>
-                      <Select value={newJob.employment_type} onValueChange={(v) => setNewJob({ ...newJob, employment_type: v })}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="full_time">Full Time</SelectItem>
-                          <SelectItem value="part_time">Part Time</SelectItem>
-                          <SelectItem value="contract">Contract</SelectItem>
-                          <SelectItem value="internship">Internship</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Salary Range</Label>
-                    <Input
-                      value={newJob.salary_range}
-                      onChange={(e) => setNewJob({ ...newJob, salary_range: e.target.value })}
-                      placeholder="e.g. $80,000 - $120,000"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Description</Label>
-                    <Textarea
-                      value={newJob.description}
-                      onChange={(e) => setNewJob({ ...newJob, description: e.target.value })}
-                      placeholder="Job description..."
-                      rows={3}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Requirements</Label>
-                    <Textarea
-                      value={newJob.requirements}
-                      onChange={(e) => setNewJob({ ...newJob, requirements: e.target.value })}
-                      placeholder="Job requirements..."
-                      rows={3}
-                    />
-                  </div>
-                  <Button className="w-full" variant="gradient" onClick={handleCreateJob}>
-                    Create Job Posting
+            {canEdit && (
+              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="gradient">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Post Job
                   </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[500px]">
+                  <DialogHeader>
+                    <DialogTitle>Create Job Posting</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="title">Job Title *</Label>
+                      <Input
+                        id="title"
+                        value={newJob.title}
+                        onChange={(e) => setNewJob({ ...newJob, title: e.target.value })}
+                        placeholder="e.g. Senior Software Engineer"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Department</Label>
+                        <Select value={newJob.department_id} onValueChange={(v) => setNewJob({ ...newJob, department_id: v })}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {departments.map((d) => (
+                              <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Employment Type</Label>
+                        <Select value={newJob.employment_type} onValueChange={(v) => setNewJob({ ...newJob, employment_type: v })}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="full_time">Full Time</SelectItem>
+                            <SelectItem value="part_time">Part Time</SelectItem>
+                            <SelectItem value="contract">Contract</SelectItem>
+                            <SelectItem value="internship">Internship</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Salary Range (ZMW)</Label>
+                      <Input
+                        value={newJob.salary_range}
+                        onChange={(e) => setNewJob({ ...newJob, salary_range: e.target.value })}
+                        placeholder="e.g. ZMW 15,000 - ZMW 25,000"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Description</Label>
+                      <Textarea
+                        value={newJob.description}
+                        onChange={(e) => setNewJob({ ...newJob, description: e.target.value })}
+                        placeholder="Job description..."
+                        rows={3}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Requirements</Label>
+                      <Textarea
+                        value={newJob.requirements}
+                        onChange={(e) => setNewJob({ ...newJob, requirements: e.target.value })}
+                        placeholder="Job requirements..."
+                        rows={3}
+                      />
+                    </div>
+                    <Button className="w-full" variant="gradient" onClick={handleCreateJob}>
+                      Create Job Posting
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
           </div>
         </div>
 
@@ -398,7 +402,9 @@ export default function Recruitment() {
                       <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Position</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Applied</th>
                       <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">Status</th>
-                      <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Actions</th>
+                      {canEdit && (
+                        <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Actions</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -427,27 +433,29 @@ export default function Recruitment() {
                               </div>
                             </div>
                           </td>
-                          <td className="py-3 px-4 text-sm">{app.job?.title || "Unknown"}</td>
-                          <td className="py-3 px-4 text-sm text-muted-foreground">
+                          <td className="py-3 px-4 text-sm">{app.job?.title || "—"}</td>
+                          <td className="py-3 px-4 text-sm">
                             {format(new Date(app.applied_at), "MMM d, yyyy")}
                           </td>
                           <td className="py-3 px-4 text-center">
-                            <Badge variant="secondary" className={cn("capitalize", status.bg, status.text)}>
+                            <Badge variant="secondary" className={cn("capitalize", status?.bg, status?.text)}>
                               {app.status}
                             </Badge>
                           </td>
-                          <td className="py-3 px-4 text-right">
-                            <Button variant="ghost" size="sm">
-                              <FileText className="w-4 h-4 mr-1" />
-                              View
-                            </Button>
-                          </td>
+                          {canEdit && (
+                            <td className="py-3 px-4 text-right">
+                              <Button variant="ghost" size="sm">
+                                <FileText className="w-4 h-4 mr-1" />
+                                Review
+                              </Button>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
                     {filteredApplications.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                        <td colSpan={canEdit ? 5 : 4} className="py-8 text-center text-muted-foreground">
                           No applications found
                         </td>
                       </tr>

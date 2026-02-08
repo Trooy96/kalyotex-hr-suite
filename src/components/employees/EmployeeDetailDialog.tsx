@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -292,6 +293,7 @@ export function EmployeeDetailDialog({ employee, open, onOpenChange, onUpdate }:
               </Button>
             )}
           </DialogTitle>
+          <DialogDescription>View and manage employee profile, contracts, salary, and emergency contacts</DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="profile" className="mt-4">

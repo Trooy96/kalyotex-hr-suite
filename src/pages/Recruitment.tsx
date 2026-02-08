@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,10 +8,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -33,6 +44,7 @@ import {
   Mail,
   Phone,
   FileText,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -89,6 +101,11 @@ export default function Recruitment() {
   const [stats, setStats] = useState({ openPositions: 0, totalApplications: 0, newApplicants: 0, interviews: 0 });
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteJobOpen, setDeleteJobOpen] = useState(false);
+  const [jobToDelete, setJobToDelete] = useState<JobPosting | null>(null);
+  const [deleteAppOpen, setDeleteAppOpen] = useState(false);
+  const [appToDelete, setAppToDelete] = useState<JobApplication | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [newJob, setNewJob] = useState({
     title: "",
     description: "",
@@ -163,6 +180,36 @@ export default function Recruitment() {
       setNewJob({ title: "", description: "", requirements: "", salary_range: "", employment_type: "full_time", department_id: "" });
       fetchData();
     }
+  }
+
+  async function handleDeleteJob() {
+    if (!jobToDelete) return;
+    setDeleting(true);
+    const { error } = await supabase.from("job_postings").delete().eq("id", jobToDelete.id);
+    if (error) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    } else {
+      toast({ title: "Deleted", description: `"${jobToDelete.title}" has been removed.` });
+      fetchData();
+    }
+    setDeleting(false);
+    setDeleteJobOpen(false);
+    setJobToDelete(null);
+  }
+
+  async function handleDeleteApplication() {
+    if (!appToDelete) return;
+    setDeleting(true);
+    const { error } = await supabase.from("job_applications").delete().eq("id", appToDelete.id);
+    if (error) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    } else {
+      toast({ title: "Deleted", description: `Application from ${appToDelete.applicant_name} has been removed.` });
+      fetchData();
+    }
+    setDeleting(false);
+    setDeleteAppOpen(false);
+    setAppToDelete(null);
   }
 
   const filteredJobs = jobs.filter((job) =>
@@ -258,6 +305,7 @@ export default function Recruitment() {
                 <DialogContent className="sm:max-w-[500px]">
                   <DialogHeader>
                     <DialogTitle>Create Job Posting</DialogTitle>
+                    <DialogDescription>Fill in the details to create a new job posting</DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4 py-4">
                     <div className="space-y-2">
@@ -346,14 +394,14 @@ export default function Recruitment() {
                 >
                   <CardContent className="p-5">
                     <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h3 className="font-semibold text-lg">{job.title}</h3>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-lg truncate">{job.title}</h3>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                          <Building2 className="w-3.5 h-3.5" />
+                          <Building2 className="w-3.5 h-3.5 shrink-0" />
                           <span>{job.department?.name || "No department"}</span>
                         </div>
                       </div>
-                      <Badge variant="secondary" className={cn("capitalize", status.bg, status.text)}>
+                      <Badge variant="secondary" className={cn("capitalize shrink-0 ml-2", status.bg, status.text)}>
                         {job.status}
                       </Badge>
                     </div>
@@ -375,9 +423,21 @@ export default function Recruitment() {
                         <Users className="w-4 h-4" />
                         <span>{job.applications?.length || 0} applicants</span>
                       </div>
-                      <span className="text-xs text-muted-foreground">
-                        {format(new Date(job.created_at), "MMM d, yyyy")}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {format(new Date(job.created_at), "MMM d, yyyy")}
+                        </span>
+                        {canEdit && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-destructive hover:text-destructive"
+                            onClick={() => { setJobToDelete(job); setDeleteJobOpen(true); }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -444,10 +504,20 @@ export default function Recruitment() {
                           </td>
                           {canEdit && (
                             <td className="py-3 px-4 text-right">
-                              <Button variant="ghost" size="sm">
-                                <FileText className="w-4 h-4 mr-1" />
-                                Review
-                              </Button>
+                              <div className="flex items-center justify-end gap-1">
+                                <Button variant="ghost" size="sm">
+                                  <FileText className="w-4 h-4 mr-1" />
+                                  Review
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => { setAppToDelete(app); setDeleteAppOpen(true); }}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
                             </td>
                           )}
                         </tr>
@@ -467,6 +537,50 @@ export default function Recruitment() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Delete Job Posting Dialog */}
+      <AlertDialog open={deleteJobOpen} onOpenChange={setDeleteJobOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Job Posting</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{jobToDelete?.title}</strong>? This will also remove all associated applications. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteJob}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleting}
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Application Dialog */}
+      <AlertDialog open={deleteAppOpen} onOpenChange={setDeleteAppOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Application</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete the application from <strong>{appToDelete?.applicant_name}</strong>? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteApplication}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleting}
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

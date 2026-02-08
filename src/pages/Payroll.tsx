@@ -19,6 +19,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
   DollarSign,
   Download,
   Search,
@@ -28,10 +35,15 @@ import {
   Clock,
   FileText,
   ChevronDown,
+  Eye,
+  Edit,
+  Loader2,
+  Save,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useRequireAuth } from "@/hooks/useAuth";
+import { useUserRole } from "@/hooks/useUserRole";
 import { format } from "date-fns";
 import { exportPayrollToPDF, exportIndividualPayslip } from "@/utils/payrollPdfExport";
 import { useToast } from "@/hooks/use-toast";
@@ -51,7 +63,9 @@ interface PayrollRecord {
   lunch_allowance: number | null;
   other_allowances: number | null;
   napsa_employee: number | null;
+  napsa_employer: number | null;
   nhima_employee: number | null;
+  nhima_employer: number | null;
   paye: number | null;
   payment_status: string | null;
   pay_period_start: string;
@@ -74,6 +88,8 @@ const statusStyles: Record<string, { bg: string; text: string; icon: React.Compo
 export default function Payroll() {
   const { toast } = useToast();
   const { user, loading: authLoading } = useRequireAuth();
+  const { isAdmin, isManager } = useUserRole();
+  const canManage = isAdmin || isManager;
   const [records, setRecords] = useState<PayrollRecord[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -84,6 +100,11 @@ export default function Payroll() {
     avgSalary: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [selectedRecord, setSelectedRecord] = useState<PayrollRecord | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [editingStatus, setEditingStatus] = useState(false);
+  const [newStatus, setNewStatus] = useState("");
+  const [savingStatus, setSavingStatus] = useState(false);
 
   async function fetchData() {
     const [recordsRes, pendingRes, paidRes] = await Promise.all([
@@ -93,7 +114,7 @@ export default function Payroll() {
           id, base_salary, bonuses, deductions, tax, net_pay, payment_status,
           pay_period_start, pay_period_end, payment_date, gross_pay,
           housing_allowance, transport_allowance, lunch_allowance, other_allowances,
-          napsa_employee, nhima_employee, paye,
+          napsa_employee, napsa_employer, nhima_employee, nhima_employer, paye,
           employee:profiles!payroll_records_employee_id_fkey(
             first_name, last_name, position,
             department:departments(name)
@@ -126,14 +147,37 @@ export default function Payroll() {
     if (user) fetchData();
   }, [user]);
 
+  const handleStatusUpdate = async () => {
+    if (!selectedRecord || !newStatus) return;
+    setSavingStatus(true);
+
+    const updateData: any = { payment_status: newStatus };
+    if (newStatus === "paid") {
+      updateData.payment_date = new Date().toISOString().split("T")[0];
+    }
+
+    const { error } = await supabase
+      .from("payroll_records")
+      .update(updateData)
+      .eq("id", selectedRecord.id);
+
+    if (error) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    } else {
+      toast({ title: "Status Updated", description: `Payment marked as ${newStatus}` });
+      setEditingStatus(false);
+      setDetailOpen(false);
+      fetchData();
+    }
+    setSavingStatus(false);
+  };
+
   const filteredRecords = records.filter((record) => {
     const fullName = `${record.employee?.first_name || ""} ${record.employee?.last_name || ""}`.toLowerCase();
     const matchesSearch = fullName.includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || record.payment_status === statusFilter;
     return matchesSearch && matchesStatus;
   });
-
-  const formatCurrency = (amount: number) => formatZMW(amount);
 
   if (authLoading || loading) {
     return (
@@ -152,7 +196,7 @@ export default function Payroll() {
               <DollarSign className="w-6 h-6 text-primary" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{formatCurrency(stats.totalPayroll)}</p>
+              <p className="text-2xl font-bold">{formatZMW(stats.totalPayroll)}</p>
               <p className="text-sm text-muted-foreground">Total Payroll</p>
             </div>
           </CardContent>
@@ -185,7 +229,7 @@ export default function Payroll() {
               <TrendingUp className="w-6 h-6 text-info" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{formatCurrency(stats.avgSalary)}</p>
+              <p className="text-2xl font-bold">{formatZMW(stats.avgSalary)}</p>
               <p className="text-sm text-muted-foreground">Average Salary</p>
             </div>
           </CardContent>
@@ -228,18 +272,11 @@ export default function Payroll() {
                 <DropdownMenuItem
                   onClick={() => {
                     if (filteredRecords.length === 0) {
-                      toast({
-                        title: "No records",
-                        description: "No payroll records to export",
-                        variant: "destructive",
-                      });
+                      toast({ title: "No records", description: "No payroll records to export", variant: "destructive" });
                       return;
                     }
                     exportPayrollToPDF(filteredRecords);
-                    toast({
-                      title: "PDF Generated",
-                      description: "Payroll report has been downloaded",
-                    });
+                    toast({ title: "PDF Generated", description: "Payroll report has been downloaded" });
                   }}
                 >
                   <FileText className="w-4 h-4 mr-2" />
@@ -247,7 +284,7 @@ export default function Payroll() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <RunPayrollDialog onSuccess={fetchData} />
+            {canManage && <RunPayrollDialog onSuccess={fetchData} />}
           </div>
         </CardHeader>
         <CardContent>
@@ -257,9 +294,9 @@ export default function Payroll() {
                 <tr className="border-b border-border">
                   <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Employee</th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Period</th>
-                  <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Base</th>
-                  <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Bonus</th>
-                  <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Deductions</th>
+                  <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Gross</th>
+                  <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">PAYE</th>
+                  <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">NAPSA</th>
                   <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Net Pay</th>
                   <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">Status</th>
                   <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">Actions</th>
@@ -300,16 +337,16 @@ export default function Payroll() {
                         {format(new Date(record.pay_period_end), "MMM d, yyyy")}
                       </td>
                       <td className="py-3 px-4 text-right font-medium">
-                        {formatCurrency(record.base_salary)}
-                      </td>
-                      <td className="py-3 px-4 text-right text-success">
-                        +{formatCurrency(record.bonuses || 0)}
+                        {formatZMW(record.gross_pay || record.base_salary)}
                       </td>
                       <td className="py-3 px-4 text-right text-destructive">
-                        -{formatCurrency((record.deductions || 0) + (record.tax || 0))}
+                        -{formatZMW(record.paye || 0)}
+                      </td>
+                      <td className="py-3 px-4 text-right text-destructive">
+                        -{formatZMW(record.napsa_employee || 0)}
                       </td>
                       <td className="py-3 px-4 text-right font-bold">
-                        {formatCurrency(record.net_pay)}
+                        {formatZMW(record.net_pay)}
                       </td>
                       <td className="py-3 px-4 text-center">
                         <Badge
@@ -321,19 +358,32 @@ export default function Payroll() {
                         </Badge>
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            exportIndividualPayslip(record);
-                            toast({
-                              title: "Payslip Generated",
-                              description: `Payslip for ${fullName} has been downloaded`,
-                            });
-                          }}
-                        >
-                          <FileText className="w-4 h-4" />
-                        </Button>
+                        <div className="flex items-center justify-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedRecord(record);
+                              setNewStatus(record.payment_status || "pending");
+                              setDetailOpen(true);
+                            }}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              exportIndividualPayslip(record);
+                              toast({
+                                title: "Payslip Generated",
+                                description: `Payslip for ${fullName} has been downloaded`,
+                              });
+                            }}
+                          >
+                            <FileText className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -350,6 +400,94 @@ export default function Payroll() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Payroll Detail Dialog */}
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Payslip Details</DialogTitle>
+          </DialogHeader>
+          {selectedRecord && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 pb-3 border-b">
+                <Avatar className="h-12 w-12">
+                  <AvatarFallback className="bg-primary/10 text-primary">
+                    {`${selectedRecord.employee?.first_name?.[0] || ""}${selectedRecord.employee?.last_name?.[0] || ""}`.toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-semibold">
+                    {selectedRecord.employee?.first_name} {selectedRecord.employee?.last_name}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedRecord.employee?.position} • {selectedRecord.employee?.department?.name}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2 text-sm">
+                <h4 className="font-medium text-muted-foreground">Earnings</h4>
+                <div className="flex justify-between"><span>Base Salary</span><span className="font-medium">{formatZMW(selectedRecord.base_salary)}</span></div>
+                <div className="flex justify-between"><span>Housing Allowance</span><span>{formatZMW(selectedRecord.housing_allowance || 0)}</span></div>
+                <div className="flex justify-between"><span>Transport Allowance</span><span>{formatZMW(selectedRecord.transport_allowance || 0)}</span></div>
+                <div className="flex justify-between"><span>Lunch Allowance</span><span>{formatZMW(selectedRecord.lunch_allowance || 0)}</span></div>
+                <div className="flex justify-between"><span>Other Allowances</span><span>{formatZMW(selectedRecord.other_allowances || 0)}</span></div>
+                <div className="flex justify-between"><span>Bonuses</span><span className="text-success">{formatZMW(selectedRecord.bonuses || 0)}</span></div>
+                <div className="flex justify-between font-bold border-t pt-2"><span>Gross Pay</span><span>{formatZMW(selectedRecord.gross_pay || 0)}</span></div>
+              </div>
+
+              <div className="space-y-2 text-sm">
+                <h4 className="font-medium text-muted-foreground">Deductions</h4>
+                <div className="flex justify-between"><span>PAYE</span><span className="text-destructive">-{formatZMW(selectedRecord.paye || 0)}</span></div>
+                <div className="flex justify-between"><span>NAPSA (Employee)</span><span className="text-destructive">-{formatZMW(selectedRecord.napsa_employee || 0)}</span></div>
+                <div className="flex justify-between"><span>NHIMA (Employee)</span><span className="text-destructive">-{formatZMW(selectedRecord.nhima_employee || 0)}</span></div>
+                <div className="flex justify-between font-bold border-t pt-2"><span>Total Deductions</span><span className="text-destructive">-{formatZMW(selectedRecord.deductions || 0)}</span></div>
+              </div>
+
+              <div className="flex justify-between text-lg font-bold bg-primary/5 p-3 rounded-lg">
+                <span>Net Pay</span>
+                <span className="text-primary">{formatZMW(selectedRecord.net_pay)}</span>
+              </div>
+
+              <div className="space-y-2 text-sm border-t pt-3">
+                <h4 className="font-medium text-muted-foreground">Employer Contributions</h4>
+                <div className="flex justify-between"><span>NAPSA (Employer)</span><span>{formatZMW(selectedRecord.napsa_employer || 0)}</span></div>
+                <div className="flex justify-between"><span>NHIMA (Employer)</span><span>{formatZMW(selectedRecord.nhima_employer || 0)}</span></div>
+              </div>
+
+              {canManage && (
+                <div className="border-t pt-3">
+                  {editingStatus ? (
+                    <div className="flex items-center gap-2">
+                      <Select value={newStatus} onValueChange={setNewStatus}>
+                        <SelectTrigger className="flex-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="processing">Processing</SelectItem>
+                          <SelectItem value="paid">Paid</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button onClick={handleStatusUpdate} disabled={savingStatus} size="sm">
+                        {savingStatus ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setEditingStatus(false)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={() => setEditingStatus(true)} className="w-full">
+                      <Edit className="w-4 h-4 mr-2" />
+                      Update Payment Status
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }

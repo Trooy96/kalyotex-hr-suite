@@ -12,12 +12,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Grid3X3, List, Mail, Phone, DollarSign, Eye } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Search, Grid3X3, List, Mail, Phone, Eye, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useRequireAuth } from "@/hooks/useAuth";
+import { useUserRole } from "@/hooks/useUserRole";
 import { AddEmployeeDialog } from "@/components/employees/AddEmployeeDialog";
 import { EmployeeDetailDialog } from "@/components/employees/EmployeeDetailDialog";
 import { formatZMW } from "@/utils/payrollCalculations";
+import { useToast } from "@/hooks/use-toast";
 
 interface Employee {
   id: string;
@@ -34,6 +46,8 @@ interface Employee {
 
 export default function Employees() {
   const { user, loading: authLoading } = useRequireAuth();
+  const { isAdmin, isManager, isEmployee } = useUserRole();
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [department, setDepartment] = useState("all");
   const [view, setView] = useState<"grid" | "list">("grid");
@@ -42,6 +56,11 @@ export default function Employees() {
   const [loading, setLoading] = useState(true);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const canEdit = isAdmin || isManager;
 
   async function fetchData() {
     const [employeesRes, deptRes] = await Promise.all([
@@ -57,6 +76,33 @@ export default function Employees() {
   useEffect(() => {
     if (user) fetchData();
   }, [user]);
+
+  const handleDeleteEmployee = async () => {
+    if (!employeeToDelete) return;
+    setDeleting(true);
+
+    const { error } = await supabase
+      .from("profiles")
+      .delete()
+      .eq("id", employeeToDelete.id);
+
+    if (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    } else {
+      toast({
+        title: "Employee Deleted",
+        description: `${employeeToDelete.first_name || ""} ${employeeToDelete.last_name || ""} has been removed.`,
+      });
+      fetchData();
+    }
+    setDeleting(false);
+    setDeleteDialogOpen(false);
+    setEmployeeToDelete(null);
+  };
 
   const filteredEmployees = employees.filter((employee) => {
     const fullName = `${employee.first_name || ""} ${employee.last_name || ""}`.toLowerCase();
@@ -126,7 +172,9 @@ export default function Employees() {
             </Button>
           </div>
 
-          <AddEmployeeDialog departments={departments} onSuccess={fetchData} />
+          {canEdit && (
+            <AddEmployeeDialog departments={departments} onSuccess={fetchData} />
+          )}
         </div>
       </div>
 
@@ -178,24 +226,37 @@ export default function Employees() {
                   )}
                   {employee.salary && (
                     <div className="flex items-center gap-2 text-primary font-medium">
-                      <DollarSign className="w-4 h-4" />
+                      <span className="text-xs">ZMW</span>
                       <span>{formatZMW(employee.salary)}/mo</span>
                     </div>
                   )}
                 </div>
-                <div className="mt-4 pt-4 border-t">
+                <div className="mt-4 pt-4 border-t flex gap-2">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="w-full"
+                    className="flex-1"
                     onClick={() => {
                       setSelectedEmployee(employee);
                       setDetailDialogOpen(true);
                     }}
                   >
                     <Eye className="w-4 h-4 mr-2" />
-                    View Details
+                    View
                   </Button>
+                  {canEdit && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => {
+                        setEmployeeToDelete(employee);
+                        setDeleteDialogOpen(true);
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -221,6 +282,31 @@ export default function Employees() {
         onOpenChange={setDetailDialogOpen}
         onUpdate={fetchData}
       />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Employee</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete{" "}
+              <strong>
+                {employeeToDelete?.first_name || ""} {employeeToDelete?.last_name || ""}
+              </strong>
+              ? This action cannot be undone and will remove all their associated records.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteEmployee}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleting}
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

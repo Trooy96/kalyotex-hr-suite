@@ -26,11 +26,22 @@ export function Header({ title, subtitle, onMenuClick }: HeaderProps) {
   const [user, setUser] = useState<any>(null);
   const [company, setCompany] = useState<any>(null);
   const [membership, setMembership] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
 
   useEffect(() => {
     const fetchUserAndCompany = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
+
+      if (user) {
+        // Fetch the user's profile for name & avatar
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("first_name, last_name, avatar_url")
+          .eq("user_id", user.id)
+          .single();
+        setProfile(profileData);
+      }
 
       const selectedCompanyId = localStorage.getItem("selectedCompanyId");
       if (selectedCompanyId && user) {
@@ -65,7 +76,13 @@ export function Header({ title, subtitle, onMenuClick }: HeaderProps) {
     navigate("/get-started");
   };
 
-  const userInitials = user?.email?.slice(0, 2).toUpperCase() || "U";
+  const displayName = profile?.first_name
+    ? `${profile.first_name} ${profile.last_name || ""}`.trim()
+    : user?.email;
+
+  const userInitials = profile?.first_name
+    ? `${profile.first_name[0]}${profile.last_name?.[0] || ""}`.toUpperCase()
+    : user?.email?.slice(0, 2).toUpperCase() || "U";
 
   return (
     <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-md border-b border-border">
@@ -142,13 +159,13 @@ export function Header({ title, subtitle, onMenuClick }: HeaderProps) {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center gap-3 px-2">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src="/placeholder.svg" />
+                  <AvatarImage src={profile?.avatar_url || undefined} />
                   <AvatarFallback className="bg-primary text-primary-foreground text-sm">
                     {userInitials}
                   </AvatarFallback>
                 </Avatar>
                 <div className="hidden lg:flex flex-col items-start">
-                  <span className="text-sm font-medium">{user?.email}</span>
+                  <span className="text-sm font-medium">{displayName}</span>
                   <span className="text-xs text-muted-foreground">
                     {membership?.role?.replace("_", " ") || "Loading..."}
                   </span>

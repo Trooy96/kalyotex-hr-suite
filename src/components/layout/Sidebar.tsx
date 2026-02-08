@@ -15,6 +15,7 @@ import {
   ChevronRight,
   BarChart3,
   Star,
+  ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +26,7 @@ const navigation: { name: string; href: string; icon: typeof LayoutDashboard; ba
   { name: "Attendance", href: "/attendance", icon: Clock },
   { name: "Leave Management", href: "/leave", icon: Calendar },
   { name: "Payroll", href: "/payroll", icon: DollarSign },
+  { name: "Tasks", href: "/tasks", icon: ClipboardList },
   { name: "Performance", href: "/performance", icon: Star },
   { name: "Reports", href: "/reports", icon: BarChart3 },
   { name: "Recruitment", href: "/recruitment", icon: Briefcase },

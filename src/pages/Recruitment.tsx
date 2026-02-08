@@ -113,6 +113,7 @@ export default function Recruitment() {
     salary_range: "",
     employment_type: "full_time",
     department_id: "",
+    is_public: false,
   });
 
   useEffect(() => {
@@ -170,6 +171,7 @@ export default function Recruitment() {
       department_id: newJob.department_id || null,
       posted_by: profile?.id,
       status: "open",
+      is_public: newJob.is_public,
     });
 
     if (error) {
@@ -177,7 +179,7 @@ export default function Recruitment() {
     } else {
       toast({ title: "Success", description: "Job posting created successfully" });
       setDialogOpen(false);
-      setNewJob({ title: "", description: "", requirements: "", salary_range: "", employment_type: "full_time", department_id: "" });
+      setNewJob({ title: "", description: "", requirements: "", salary_range: "", employment_type: "full_time", department_id: "", is_public: false });
       fetchData();
     }
   }
@@ -371,6 +373,18 @@ export default function Recruitment() {
                         placeholder="Job requirements..."
                         rows={3}
                       />
+                    </div>
+                    <div className="flex items-center gap-2 p-3 rounded-lg border border-border">
+                      <input
+                        type="checkbox"
+                        id="is_public"
+                        checked={newJob.is_public}
+                        onChange={(e) => setNewJob({ ...newJob, is_public: e.target.checked })}
+                        className="rounded"
+                      />
+                      <Label htmlFor="is_public" className="cursor-pointer text-sm">
+                        Post to company careers page (/careers)
+                      </Label>
                     </div>
                     <Button className="w-full" variant="gradient" onClick={handleCreateJob}>
                       Create Job Posting

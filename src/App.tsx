@@ -16,6 +16,8 @@ import Recruitment from "./pages/Recruitment";
 import Documents from "./pages/Documents";
 import Reports from "./pages/Reports";
 import PerformanceReviews from "./pages/PerformanceReviews";
+import Tasks from "./pages/Tasks";
+import Careers from "./pages/Careers";
 import Settings from "./pages/Settings";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
@@ -33,6 +35,7 @@ const App = () => (
             <Route path="/landing" element={<Landing />} />
             <Route path="/get-started" element={<GetStarted />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/careers" element={<Careers />} />
             <Route path="/" element={<ProtectedIndex />} />
             <Route path="/employees" element={<Employees />} />
             <Route path="/attendance" element={<Attendance />} />
@@ -43,6 +46,7 @@ const App = () => (
             <Route path="/documents" element={<Documents />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/performance" element={<PerformanceReviews />} />
+            <Route path="/tasks" element={<Tasks />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

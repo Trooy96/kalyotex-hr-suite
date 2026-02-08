@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -32,11 +33,11 @@ import {
   FolderOpen,
   Grid3X3,
   List,
-  Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useRequireAuth } from "@/hooks/useAuth";
+import { useUserRole } from "@/hooks/useUserRole";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 
@@ -50,10 +51,21 @@ interface Document {
   document_category: string | null;
   is_public: boolean | null;
   uploaded_at: string;
+  assigned_to: string | null;
   owner: {
     first_name: string | null;
     last_name: string | null;
   } | null;
+  assigned_employee: {
+    first_name: string | null;
+    last_name: string | null;
+  } | null;
+}
+
+interface Employee {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
 }
 
 const categoryColors: Record<string, string> = {
@@ -78,9 +90,12 @@ const fileIcons: Record<string, React.ComponentType<any>> = {
 
 export default function Documents() {
   const { user, loading: authLoading } = useRequireAuth();
+  const { isAdmin, isManager } = useUserRole();
+  const canManage = isAdmin || isManager;
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [view, setView] = useState<"grid" | "list">("grid");
@@ -93,6 +108,7 @@ export default function Documents() {
     description: "",
     category: "other",
     is_public: false,
+    assigned_to: "",
     file: null as File | null,
   });
 
@@ -101,17 +117,23 @@ export default function Documents() {
   }, [user]);
 
   async function fetchData() {
-    const [docsRes, contractsRes, policiesRes, reportsRes] = await Promise.all([
+    const [docsRes, contractsRes, policiesRes, reportsRes, empRes] = await Promise.all([
       supabase
         .from("documents")
-        .select("id, name, description, file_path, file_type, file_size, document_category, is_public, uploaded_at, owner:profiles!documents_owner_id_fkey(first_name, last_name)")
+        .select(`
+          id, name, description, file_path, file_type, file_size, document_category, is_public, uploaded_at, assigned_to,
+          owner:profiles!documents_owner_id_fkey(first_name, last_name),
+          assigned_employee:profiles!documents_assigned_to_fkey(first_name, last_name)
+        `)
         .order("uploaded_at", { ascending: false }),
       supabase.from("documents").select("id", { count: "exact" }).eq("document_category", "contract"),
       supabase.from("documents").select("id", { count: "exact" }).eq("document_category", "policy"),
       supabase.from("documents").select("id", { count: "exact" }).eq("document_category", "report"),
+      supabase.from("profiles").select("id, first_name, last_name"),
     ]);
 
     if (docsRes.data) setDocuments(docsRes.data as Document[]);
+    if (empRes.data) setEmployees(empRes.data);
     setStats({
       total: docsRes.data?.length || 0,
       contracts: contractsRes.count || 0,
@@ -156,13 +178,14 @@ export default function Documents() {
         document_category: newDoc.category,
         is_public: newDoc.is_public,
         owner_id: profile.id,
+        assigned_to: newDoc.assigned_to || null,
       });
 
       if (dbError) throw dbError;
 
       toast({ title: "Success", description: "Document uploaded successfully" });
       setDialogOpen(false);
-      setNewDoc({ name: "", description: "", category: "other", is_public: false, file: null });
+      setNewDoc({ name: "", description: "", category: "other", is_public: false, assigned_to: "", file: null });
       fetchData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -319,6 +342,7 @@ export default function Documents() {
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Upload Document</DialogTitle>
+                  <DialogDescription>Upload a document and optionally assign it to an employee</DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div
@@ -366,6 +390,26 @@ export default function Documents() {
                       </SelectContent>
                     </Select>
                   </div>
+                  {canManage && (
+                    <div className="space-y-2">
+                      <Label>Assign to Employee</Label>
+                      <Select value={newDoc.assigned_to} onValueChange={(v) => setNewDoc({ ...newDoc, assigned_to: v })}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select employee (optional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {employees.map((emp) => (
+                            <SelectItem key={emp.id} value={emp.id}>
+                              {emp.first_name} {emp.last_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Only the assigned employee will be able to view this document
+                      </p>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label>Description</Label>
                     <Textarea
@@ -406,15 +450,22 @@ export default function Documents() {
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDownload(doc)}>
                             <Download className="w-4 h-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(doc)}>
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          {canManage && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(doc)}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                       <h4 className="font-medium truncate mb-1">{doc.name}</h4>
-                      <p className="text-xs text-muted-foreground mb-3">
+                      <p className="text-xs text-muted-foreground mb-2">
                         {formatFileSize(doc.file_size)} • {format(new Date(doc.uploaded_at), "MMM d, yyyy")}
                       </p>
+                      {doc.assigned_employee && (
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Assigned to: {doc.assigned_employee.first_name} {doc.assigned_employee.last_name}
+                        </p>
+                      )}
                       <Badge variant="secondary" className={cn("text-xs capitalize", categoryColor)}>
                         {doc.document_category || "other"}
                       </Badge>
@@ -430,6 +481,7 @@ export default function Documents() {
                   <tr className="border-b border-border">
                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Name</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Category</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Assigned To</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Size</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Uploaded</th>
                     <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Actions</th>
@@ -459,6 +511,11 @@ export default function Documents() {
                           </Badge>
                         </td>
                         <td className="py-3 px-4 text-sm text-muted-foreground">
+                          {doc.assigned_employee
+                            ? `${doc.assigned_employee.first_name} ${doc.assigned_employee.last_name}`
+                            : "—"}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-muted-foreground">
                           {formatFileSize(doc.file_size)}
                         </td>
                         <td className="py-3 px-4 text-sm text-muted-foreground">
@@ -469,9 +526,11 @@ export default function Documents() {
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDownload(doc)}>
                               <Download className="w-4 h-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(doc)}>
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
+                            {canManage && (
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(doc)}>
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            )}
                           </div>
                         </td>
                       </tr>

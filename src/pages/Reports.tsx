@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useRequireAuth } from "@/hooks/useAuth";
+import { useUserRole } from "@/hooks/useUserRole";
 import { format, startOfMonth, endOfMonth, differenceInDays, subMonths } from "date-fns";
 import { formatZMW } from "@/utils/payrollCalculations";
 
@@ -63,6 +64,8 @@ interface LeaveBalance {
 
 export default function Reports() {
   const { user, loading: authLoading } = useRequireAuth();
+  const { isAdmin, isManager, profileId } = useUserRole();
+  const canViewAll = isAdmin || isManager;
   const [payrollSummary, setPayrollSummary] = useState<PayrollSummary>({
     totalGross: 0, totalNet: 0, totalNapsa: 0, totalNhima: 0, totalPaye: 0, employeeCount: 0,
   });
@@ -74,7 +77,6 @@ export default function Reports() {
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), "yyyy-MM"));
   const [loading, setLoading] = useState(true);
 
-  // Generate last 12 months dynamically
   const monthOptions = Array.from({ length: 12 }, (_, i) => {
     const date = subMonths(new Date(), i);
     return { value: format(date, "yyyy-MM"), label: format(date, "MMMM yyyy") };
@@ -87,12 +89,18 @@ export default function Reports() {
       const monthStart = startOfMonth(new Date(selectedMonth + "-01"));
       const monthEnd = endOfMonth(new Date(selectedMonth + "-01"));
 
-      // Fetch payroll summary
-      const { data: payrollData } = await supabase
+      // Payroll - employees only see their own via RLS
+      let payrollQuery = supabase
         .from("payroll_records")
         .select("gross_pay, net_pay, napsa_employee, nhima_employee, paye")
         .gte("pay_period_start", format(monthStart, "yyyy-MM-dd"))
         .lte("pay_period_end", format(monthEnd, "yyyy-MM-dd"));
+
+      if (!canViewAll && profileId) {
+        payrollQuery = payrollQuery.eq("employee_id", profileId);
+      }
+
+      const { data: payrollData } = await payrollQuery;
 
       if (payrollData) {
         setPayrollSummary({
@@ -105,13 +113,19 @@ export default function Reports() {
         });
       }
 
-      // Fetch attendance stats with employee details
-      const { data: attendanceData } = await supabase
+      // Attendance - employees only see their own via RLS
+      let attendanceQuery = supabase
         .from("attendance_records")
         .select("status, record_date, clock_in, clock_out, employee:profiles!attendance_records_employee_id_fkey(first_name, last_name)")
         .gte("record_date", format(monthStart, "yyyy-MM-dd"))
         .lte("record_date", format(monthEnd, "yyyy-MM-dd"))
         .order("record_date", { ascending: false });
+
+      if (!canViewAll && profileId) {
+        attendanceQuery = attendanceQuery.eq("employee_id", profileId);
+      }
+
+      const { data: attendanceData } = await attendanceQuery;
 
       if (attendanceData) {
         const presentDays = attendanceData.filter((a) => a.status === "present").length;
@@ -131,36 +145,68 @@ export default function Reports() {
         })));
       }
 
-      // Fetch leave balances
-      const { data: profilesData } = await supabase
-        .from("profiles")
-        .select("id, first_name, last_name");
+      // Leave balances
+      if (canViewAll) {
+        const { data: profilesData } = await supabase
+          .from("profiles")
+          .select("id, first_name, last_name");
 
-      const { data: leaveData } = await supabase
-        .from("leave_requests")
-        .select("employee_id, leave_type, start_date, end_date, status")
-        .eq("status", "approved");
+        const { data: leaveData } = await supabase
+          .from("leave_requests")
+          .select("employee_id, leave_type, start_date, end_date, status")
+          .eq("status", "approved");
 
-      if (profilesData) {
-        const balances: LeaveBalance[] = profilesData.map((profile) => {
-          const employeeLeaves = leaveData?.filter((l) => l.employee_id === profile.id) || [];
-          const usedDays = employeeLeaves.reduce((sum, leave) => {
+        if (profilesData) {
+          const balances: LeaveBalance[] = profilesData.map((profile) => {
+            const employeeLeaves = leaveData?.filter((l) => l.employee_id === profile.id) || [];
+            const usedDays = employeeLeaves.reduce((sum, leave) => {
+              const days = differenceInDays(new Date(leave.end_date), new Date(leave.start_date)) + 1;
+              return sum + days;
+            }, 0);
+
+            return {
+              employeeId: profile.id,
+              employeeName: `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "Unknown",
+              annual: 21,
+              sick: 10,
+              maternity: 90,
+              used: usedDays,
+              remaining: Math.max(0, 21 - usedDays),
+            };
+          });
+
+          setLeaveBalances(balances.slice(0, 20));
+        }
+      } else if (profileId) {
+        // Employee: only their own leave
+        const { data: leaveData } = await supabase
+          .from("leave_requests")
+          .select("employee_id, leave_type, start_date, end_date, status")
+          .eq("status", "approved")
+          .eq("employee_id", profileId);
+
+        const { data: myProfile } = await supabase
+          .from("profiles")
+          .select("id, first_name, last_name")
+          .eq("id", profileId)
+          .single();
+
+        if (myProfile) {
+          const usedDays = (leaveData || []).reduce((sum, leave) => {
             const days = differenceInDays(new Date(leave.end_date), new Date(leave.start_date)) + 1;
             return sum + days;
           }, 0);
 
-          return {
-            employeeId: profile.id,
-            employeeName: `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "Unknown",
+          setLeaveBalances([{
+            employeeId: myProfile.id,
+            employeeName: `${myProfile.first_name || ""} ${myProfile.last_name || ""}`.trim() || "Unknown",
             annual: 21,
             sick: 10,
             maternity: 90,
             used: usedDays,
             remaining: Math.max(0, 21 - usedDays),
-          };
-        });
-
-        setLeaveBalances(balances.slice(0, 20));
+          }]);
+        }
       }
 
       setLoading(false);
@@ -168,7 +214,7 @@ export default function Reports() {
 
     setLoading(true);
     fetchReports();
-  }, [user, selectedMonth]);
+  }, [user, selectedMonth, canViewAll, profileId]);
 
   if (authLoading || loading) {
     return (
@@ -186,20 +232,25 @@ export default function Reports() {
   };
 
   return (
-    <AppLayout title="Reports" subtitle="View payroll, attendance, and leave reports">
+    <AppLayout title="Reports" subtitle={canViewAll ? "Company-wide reports" : "Your personal reports"}>
       <div className="flex items-center justify-between mb-6">
-        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-          <SelectTrigger className="w-[220px]">
-            <SelectValue placeholder="Select month" />
-          </SelectTrigger>
-          <SelectContent>
-            {monthOptions.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-3">
+          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="Select month" />
+            </SelectTrigger>
+            <SelectContent>
+              {monthOptions.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {!canViewAll && (
+            <Badge variant="secondary">Personal View</Badge>
+          )}
+        </div>
         <Button variant="outline" size="sm">
           <Download className="w-4 h-4 mr-2" />
           Export Reports
@@ -231,7 +282,7 @@ export default function Reports() {
                     <TrendingUp className="w-5 h-5 text-primary" />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Gross Payroll</p>
+                    <p className="text-sm text-muted-foreground">{canViewAll ? "Gross Payroll" : "Your Gross Pay"}</p>
                     <p className="text-xl font-bold">{formatZMW(payrollSummary.totalGross)}</p>
                   </div>
                 </div>
@@ -244,7 +295,7 @@ export default function Reports() {
                     <DollarSign className="w-5 h-5 text-success" />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Net Payroll</p>
+                    <p className="text-sm text-muted-foreground">{canViewAll ? "Net Payroll" : "Your Net Pay"}</p>
                     <p className="text-xl font-bold">{formatZMW(payrollSummary.totalNet)}</p>
                   </div>
                 </div>
@@ -270,7 +321,7 @@ export default function Reports() {
                     <Users className="w-5 h-5 text-info" />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Employees</p>
+                    <p className="text-sm text-muted-foreground">{canViewAll ? "Employees" : "Records"}</p>
                     <p className="text-xl font-bold">{payrollSummary.employeeCount}</p>
                   </div>
                 </div>
@@ -362,21 +413,20 @@ export default function Reports() {
 
           <Card className="glass-card">
             <CardHeader>
-              <CardTitle>Attendance Records</CardTitle>
+              <CardTitle>{canViewAll ? "Attendance Records" : "Your Attendance"}</CardTitle>
             </CardHeader>
             <CardContent>
               {attendanceRecords.length === 0 ? (
                 <div className="py-8 text-center text-muted-foreground">
                   <Clock className="w-12 h-12 mx-auto mb-3 opacity-30" />
                   <p className="font-medium">No attendance records for this period</p>
-                  <p className="text-sm mt-1">Attendance records will appear here once employees clock in.</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-border">
-                        <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Employee</th>
+                        {canViewAll && <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Employee</th>}
                         <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Date</th>
                         <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Clock In</th>
                         <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Clock Out</th>
@@ -386,7 +436,7 @@ export default function Reports() {
                     <tbody>
                       {attendanceRecords.map((record, index) => (
                         <tr key={index} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                          <td className="py-3 px-4 font-medium">{record.employee_name}</td>
+                          {canViewAll && <td className="py-3 px-4 font-medium">{record.employee_name}</td>}
                           <td className="py-3 px-4 text-sm">
                             {format(new Date(record.record_date), "MMM d, yyyy")}
                           </td>
@@ -414,14 +464,14 @@ export default function Reports() {
         <TabsContent value="leave" className="space-y-6">
           <Card className="glass-card">
             <CardHeader>
-              <CardTitle>Leave Balances</CardTitle>
+              <CardTitle>{canViewAll ? "Leave Balances" : "Your Leave Balance"}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-border">
-                      <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Employee</th>
+                      {canViewAll && <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Employee</th>}
                       <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">Annual</th>
                       <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">Sick</th>
                       <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">Used</th>
@@ -431,7 +481,7 @@ export default function Reports() {
                   <tbody>
                     {leaveBalances.map((balance) => (
                       <tr key={balance.employeeId} className="border-b border-border/50">
-                        <td className="py-3 px-4 font-medium">{balance.employeeName}</td>
+                        {canViewAll && <td className="py-3 px-4 font-medium">{balance.employeeName}</td>}
                         <td className="py-3 px-4 text-center">{balance.annual}</td>
                         <td className="py-3 px-4 text-center">{balance.sick}</td>
                         <td className="py-3 px-4 text-center">
@@ -446,7 +496,7 @@ export default function Reports() {
                     ))}
                     {leaveBalances.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                        <td colSpan={canViewAll ? 5 : 4} className="py-8 text-center text-muted-foreground">
                           No leave data available
                         </td>
                       </tr>

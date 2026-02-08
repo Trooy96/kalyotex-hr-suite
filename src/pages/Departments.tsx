@@ -4,17 +4,29 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { MoreVertical, Users } from "lucide-react";
+import { MoreVertical, Users, Pencil, Trash2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useRequireAuth } from "@/hooks/useAuth";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useToast } from "@/hooks/use-toast";
 import { AddDepartmentDialog } from "@/components/departments/AddDepartmentDialog";
+import { EditDepartmentDialog } from "@/components/departments/EditDepartmentDialog";
 
 interface Department {
   id: string;
@@ -27,9 +39,15 @@ export default function Departments() {
   const { user, loading: authLoading } = useRequireAuth();
   const { isAdmin, isManager } = useUserRole();
   const canEdit = isAdmin || isManager;
+  const { toast } = useToast();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [totalEmployees, setTotalEmployees] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [editDept, setEditDept] = useState<Department | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deptToDelete, setDeptToDelete] = useState<Department | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   async function fetchData() {
     const [deptRes, profilesRes] = await Promise.all([
@@ -54,6 +72,21 @@ export default function Departments() {
       setTotalEmployees(profilesRes.data.length);
     }
     setLoading(false);
+  }
+
+  async function handleDelete() {
+    if (!deptToDelete) return;
+    setDeleting(true);
+    const { error } = await supabase.from("departments").delete().eq("id", deptToDelete.id);
+    if (error) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    } else {
+      toast({ title: "Deleted", description: `${deptToDelete.name} has been removed.` });
+      fetchData();
+    }
+    setDeleting(false);
+    setDeleteOpen(false);
+    setDeptToDelete(null);
   }
 
   useEffect(() => {
@@ -124,9 +157,17 @@ export default function Departments() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>View Details</DropdownMenuItem>
-                        <DropdownMenuItem>Edit Department</DropdownMenuItem>
-                        <DropdownMenuItem>View Employees</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => { setEditDept(dept); setEditOpen(true); }}>
+                          <Pencil className="w-4 h-4 mr-2" />
+                          Edit Department
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => { setDeptToDelete(dept); setDeleteOpen(true); }}
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete Department
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   )}
@@ -164,6 +205,34 @@ export default function Departments() {
           </div>
         )}
       </div>
+
+      <EditDepartmentDialog
+        department={editDept}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        onSuccess={fetchData}
+      />
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Department</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{deptToDelete?.name}</strong>? Employees in this department will be unassigned.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleting}
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

@@ -152,6 +152,7 @@ export type Database = {
       }
       documents: {
         Row: {
+          assigned_to: string | null
           description: string | null
           document_category: string | null
           file_path: string
@@ -164,6 +165,7 @@ export type Database = {
           uploaded_at: string
         }
         Insert: {
+          assigned_to?: string | null
           description?: string | null
           document_category?: string | null
           file_path: string
@@ -176,6 +178,7 @@ export type Database = {
           uploaded_at?: string
         }
         Update: {
+          assigned_to?: string | null
           description?: string | null
           document_category?: string | null
           file_path?: string
@@ -188,6 +191,13 @@ export type Database = {
           uploaded_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "documents_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "documents_owner_id_fkey"
             columns: ["owner_id"]
@@ -318,6 +328,60 @@ export type Database = {
             columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employee_tasks: {
+        Row: {
+          assigned_by: string
+          created_at: string
+          department_id: string | null
+          description: string | null
+          due_date: string | null
+          id: string
+          priority: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_by: string
+          created_at?: string
+          department_id?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          priority?: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_by?: string
+          created_at?: string
+          department_id?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          priority?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_tasks_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_tasks_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
             referencedColumns: ["id"]
           },
         ]
@@ -483,6 +547,7 @@ export type Database = {
           description: string | null
           employment_type: string | null
           id: string
+          is_public: boolean | null
           posted_by: string | null
           requirements: string | null
           salary_range: string | null
@@ -496,6 +561,7 @@ export type Database = {
           description?: string | null
           employment_type?: string | null
           id?: string
+          is_public?: boolean | null
           posted_by?: string | null
           requirements?: string | null
           salary_range?: string | null
@@ -509,6 +575,7 @@ export type Database = {
           description?: string | null
           employment_type?: string | null
           id?: string
+          is_public?: boolean | null
           posted_by?: string | null
           requirements?: string | null
           salary_range?: string | null
@@ -897,6 +964,45 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      task_assignments: {
+        Row: {
+          created_at: string
+          employee_id: string
+          id: string
+          read_at: string | null
+          task_id: string
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          id?: string
+          read_at?: string | null
+          task_id: string
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          id?: string
+          read_at?: string | null
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_assignments_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_assignments_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "employee_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {

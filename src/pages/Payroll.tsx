@@ -349,13 +349,42 @@ export default function Payroll() {
                         {formatZMW(record.net_pay)}
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <Badge
-                          variant="secondary"
-                          className={cn("capitalize flex items-center gap-1 w-fit mx-auto", status.bg, status.text)}
-                        >
-                          <StatusIcon className="w-3 h-3" />
-                          {record.payment_status}
-                        </Badge>
+                        {canManage ? (
+                          <Select
+                            value={record.payment_status || "pending"}
+                            onValueChange={async (val) => {
+                              const updateData: any = { payment_status: val };
+                              if (val === "paid") updateData.payment_date = new Date().toISOString().split("T")[0];
+                              const { error } = await supabase
+                                .from("payroll_records")
+                                .update(updateData)
+                                .eq("id", record.id);
+                              if (error) {
+                                toast({ variant: "destructive", title: "Error", description: error.message });
+                              } else {
+                                toast({ title: "Updated", description: `Status changed to ${val}` });
+                                fetchData();
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="w-[120px] h-8 mx-auto">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pending">Pending</SelectItem>
+                              <SelectItem value="processing">Processing</SelectItem>
+                              <SelectItem value="paid">Paid</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Badge
+                            variant="secondary"
+                            className={cn("capitalize flex items-center gap-1 w-fit mx-auto", status.bg, status.text)}
+                          >
+                            <StatusIcon className="w-3 h-3" />
+                            {record.payment_status}
+                          </Badge>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1">

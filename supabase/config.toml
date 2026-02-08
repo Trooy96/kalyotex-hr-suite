@@ -1,1 +1,7 @@
 project_id = "yphgzhsyydldzaqdtthr"
+
+[functions.create-company]
+verify_jwt = true
+
+[functions.apply-public]
+verify_jwt = false

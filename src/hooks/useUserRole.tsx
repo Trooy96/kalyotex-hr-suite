@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 export type AppRole = "admin" | "manager" | "employee";
 
 interface UserRoleState {
-  role: AppRole | null;
+  roles: AppRole[];
   isAdmin: boolean;
   isManager: boolean;
   isEmployee: boolean;
@@ -15,14 +15,14 @@ interface UserRoleState {
 
 export function useUserRole(): UserRoleState {
   const { user } = useAuth();
-  const [role, setRole] = useState<AppRole | null>(null);
+  const [roles, setRoles] = useState<AppRole[]>([]);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchRole() {
       if (!user) {
-        setRole(null);
+        setRoles([]);
         setProfileId(null);
         setLoading(false);
         return;
@@ -33,8 +33,7 @@ export function useUserRole(): UserRoleState {
           supabase
             .from("user_roles")
             .select("role")
-            .eq("user_id", user.id)
-            .single(),
+            .eq("user_id", user.id),
           supabase
             .from("profiles")
             .select("id")
@@ -42,8 +41,8 @@ export function useUserRole(): UserRoleState {
             .single(),
         ]);
 
-        if (roleRes.data) {
-          setRole(roleRes.data.role as AppRole);
+        if (roleRes.data && roleRes.data.length > 0) {
+          setRoles(roleRes.data.map((r) => r.role as AppRole));
         }
         if (profileRes.data) {
           setProfileId(profileRes.data.id);
@@ -58,11 +57,15 @@ export function useUserRole(): UserRoleState {
     fetchRole();
   }, [user]);
 
+  const isAdmin = roles.includes("admin");
+  const isManager = roles.includes("manager");
+  const isEmployee = roles.includes("employee");
+
   return {
-    role,
-    isAdmin: role === "admin",
-    isManager: role === "manager",
-    isEmployee: role === "employee",
+    roles,
+    isAdmin,
+    isManager,
+    isEmployee,
     loading,
     profileId,
   };

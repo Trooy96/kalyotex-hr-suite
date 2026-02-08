@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useRequireAuth } from "@/hooks/useAuth";
-import { format, startOfMonth, endOfMonth, differenceInDays } from "date-fns";
+import { format, startOfMonth, endOfMonth, differenceInDays, subMonths } from "date-fns";
 import { formatZMW } from "@/utils/payrollCalculations";
 
 interface PayrollSummary {
@@ -43,6 +43,14 @@ interface AttendanceStats {
   attendanceRate: number;
 }
 
+interface AttendanceRecord {
+  employee_name: string;
+  status: string;
+  record_date: string;
+  clock_in: string | null;
+  clock_out: string | null;
+}
+
 interface LeaveBalance {
   employeeId: string;
   employeeName: string;
@@ -56,30 +64,28 @@ interface LeaveBalance {
 export default function Reports() {
   const { user, loading: authLoading } = useRequireAuth();
   const [payrollSummary, setPayrollSummary] = useState<PayrollSummary>({
-    totalGross: 0,
-    totalNet: 0,
-    totalNapsa: 0,
-    totalNhima: 0,
-    totalPaye: 0,
-    employeeCount: 0,
+    totalGross: 0, totalNet: 0, totalNapsa: 0, totalNhima: 0, totalPaye: 0, employeeCount: 0,
   });
   const [attendanceStats, setAttendanceStats] = useState<AttendanceStats>({
-    totalDays: 0,
-    presentDays: 0,
-    absentDays: 0,
-    lateDays: 0,
-    attendanceRate: 0,
+    totalDays: 0, presentDays: 0, absentDays: 0, lateDays: 0, attendanceRate: 0,
   });
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [leaveBalances, setLeaveBalances] = useState<LeaveBalance[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), "yyyy-MM"));
   const [loading, setLoading] = useState(true);
+
+  // Generate last 12 months dynamically
+  const monthOptions = Array.from({ length: 12 }, (_, i) => {
+    const date = subMonths(new Date(), i);
+    return { value: format(date, "yyyy-MM"), label: format(date, "MMMM yyyy") };
+  });
 
   useEffect(() => {
     async function fetchReports() {
       if (!user) return;
 
-      const monthStart = startOfMonth(new Date(selectedMonth));
-      const monthEnd = endOfMonth(new Date(selectedMonth));
+      const monthStart = startOfMonth(new Date(selectedMonth + "-01"));
+      const monthEnd = endOfMonth(new Date(selectedMonth + "-01"));
 
       // Fetch payroll summary
       const { data: payrollData } = await supabase
@@ -99,12 +105,13 @@ export default function Reports() {
         });
       }
 
-      // Fetch attendance stats
+      // Fetch attendance stats with employee details
       const { data: attendanceData } = await supabase
         .from("attendance_records")
-        .select("status")
+        .select("status, record_date, clock_in, clock_out, employee:profiles!attendance_records_employee_id_fkey(first_name, last_name)")
         .gte("record_date", format(monthStart, "yyyy-MM-dd"))
-        .lte("record_date", format(monthEnd, "yyyy-MM-dd"));
+        .lte("record_date", format(monthEnd, "yyyy-MM-dd"))
+        .order("record_date", { ascending: false });
 
       if (attendanceData) {
         const presentDays = attendanceData.filter((a) => a.status === "present").length;
@@ -113,13 +120,15 @@ export default function Reports() {
         const totalDays = attendanceData.length;
         const attendanceRate = totalDays > 0 ? (presentDays / totalDays) * 100 : 0;
 
-        setAttendanceStats({
-          totalDays,
-          presentDays,
-          absentDays,
-          lateDays,
-          attendanceRate,
-        });
+        setAttendanceStats({ totalDays, presentDays, absentDays, lateDays, attendanceRate });
+
+        setAttendanceRecords(attendanceData.map((a: any) => ({
+          employee_name: `${a.employee?.first_name || ""} ${a.employee?.last_name || ""}`.trim() || "Unknown",
+          status: a.status || "present",
+          record_date: a.record_date,
+          clock_in: a.clock_in,
+          clock_out: a.clock_out,
+        })));
       }
 
       // Fetch leave balances
@@ -143,7 +152,7 @@ export default function Reports() {
           return {
             employeeId: profile.id,
             employeeName: `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "Unknown",
-            annual: 21, // Default annual leave days
+            annual: 21,
             sick: 10,
             maternity: 90,
             used: usedDays,
@@ -151,12 +160,13 @@ export default function Reports() {
           };
         });
 
-        setLeaveBalances(balances.slice(0, 10)); // Limit to 10 for display
+        setLeaveBalances(balances.slice(0, 20));
       }
 
       setLoading(false);
     }
 
+    setLoading(true);
     fetchReports();
   }, [user, selectedMonth]);
 
@@ -168,22 +178,26 @@ export default function Reports() {
     );
   }
 
+  const attendanceStatusStyles: Record<string, string> = {
+    present: "bg-success/10 text-success",
+    absent: "bg-destructive/10 text-destructive",
+    late: "bg-warning/10 text-warning",
+    "half-day": "bg-info/10 text-info",
+  };
+
   return (
     <AppLayout title="Reports" subtitle="View payroll, attendance, and leave reports">
       <div className="flex items-center justify-between mb-6">
         <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-          <SelectTrigger className="w-[200px]">
+          <SelectTrigger className="w-[220px]">
             <SelectValue placeholder="Select month" />
           </SelectTrigger>
           <SelectContent>
-            {Array.from({ length: 12 }, (_, i) => {
-              const date = new Date(2024, i, 1);
-              return (
-                <SelectItem key={i} value={format(date, "yyyy-MM")}>
-                  {format(date, "MMMM yyyy")}
-                </SelectItem>
-              );
-            })}
+            {monthOptions.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Button variant="outline" size="sm">
@@ -295,11 +309,24 @@ export default function Reports() {
             <Card className="glass-card">
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-primary/10">
+                    <Clock className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total Records</p>
+                    <p className="text-xl font-bold">{attendanceStats.totalDays}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="glass-card">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-success/10">
                     <Clock className="w-5 h-5 text-success" />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Present Days</p>
+                    <p className="text-sm text-muted-foreground">Present</p>
                     <p className="text-xl font-bold">{attendanceStats.presentDays}</p>
                   </div>
                 </div>
@@ -312,7 +339,7 @@ export default function Reports() {
                     <Clock className="w-5 h-5 text-destructive" />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Absent Days</p>
+                    <p className="text-sm text-muted-foreground">Absent</p>
                     <p className="text-xl font-bold">{attendanceStats.absentDays}</p>
                   </div>
                 </div>
@@ -322,20 +349,7 @@ export default function Reports() {
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-warning/10">
-                    <Clock className="w-5 h-5 text-warning" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Late Days</p>
-                    <p className="text-xl font-bold">{attendanceStats.lateDays}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="glass-card">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    <PieChart className="w-5 h-5 text-primary" />
+                    <PieChart className="w-5 h-5 text-warning" />
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Attendance Rate</p>
@@ -348,12 +362,51 @@ export default function Reports() {
 
           <Card className="glass-card">
             <CardHeader>
-              <CardTitle>Attendance Overview</CardTitle>
+              <CardTitle>Attendance Records</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-32 flex items-center justify-center text-muted-foreground">
-                <p>Attendance chart will be displayed here</p>
-              </div>
+              {attendanceRecords.length === 0 ? (
+                <div className="py-8 text-center text-muted-foreground">
+                  <Clock className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                  <p className="font-medium">No attendance records for this period</p>
+                  <p className="text-sm mt-1">Attendance records will appear here once employees clock in.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Employee</th>
+                        <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Date</th>
+                        <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Clock In</th>
+                        <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Clock Out</th>
+                        <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {attendanceRecords.map((record, index) => (
+                        <tr key={index} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                          <td className="py-3 px-4 font-medium">{record.employee_name}</td>
+                          <td className="py-3 px-4 text-sm">
+                            {format(new Date(record.record_date), "MMM d, yyyy")}
+                          </td>
+                          <td className="py-3 px-4 text-sm">
+                            {record.clock_in ? format(new Date(record.clock_in), "hh:mm a") : "—"}
+                          </td>
+                          <td className="py-3 px-4 text-sm">
+                            {record.clock_out ? format(new Date(record.clock_out), "hh:mm a") : "—"}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <Badge variant="secondary" className={`capitalize ${attendanceStatusStyles[record.status] || ""}`}>
+                              {record.status}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
